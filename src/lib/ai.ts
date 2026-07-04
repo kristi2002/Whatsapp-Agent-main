@@ -2,10 +2,18 @@ import OpenAI from "openai";
 import { buildSalonSystemPrompt } from "@/lib/system-prompt";
 import { TOOL_DEFINITIONS, executeTool, type ToolContext } from "@/lib/tools";
 
-const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
+// Lazily construct the client so importing this module (e.g. during
+// `next build` page-data collection) doesn't require the API key to exist.
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: process.env.OPENROUTER_API_KEY,
+    });
+  }
+  return _openai;
+}
 
 const MODEL = process.env.AI_MODEL || "anthropic/claude-sonnet-4-20250514";
 const MAX_TOOL_ROUNDS = 5;
@@ -24,7 +32,7 @@ export async function getAIResponse(
   ];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: MODEL,
       messages,
       tools: TOOL_DEFINITIONS,
@@ -61,7 +69,7 @@ export async function getAIResponse(
   }
 
   // Ran out of tool rounds — ask the model for a final text-only answer.
-  const finalMsg = await openai.chat.completions.create({ model: MODEL, messages });
+  const finalMsg = await getOpenAI().chat.completions.create({ model: MODEL, messages });
   return (
     finalMsg.choices[0]?.message?.content ||
     "Scusa, qualcosa è andato storto. Puoi chiamare il salone per assistenza."
