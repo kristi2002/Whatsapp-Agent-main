@@ -34,10 +34,14 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    // Async fetch on mount — setState runs after the await, not synchronously
+    // in the effect body, so the set-state-in-effect heuristic doesn't apply.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchConversations();
   }, [fetchConversations]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (selectedId) fetchMessages(selectedId);
   }, [selectedId, fetchMessages]);
 

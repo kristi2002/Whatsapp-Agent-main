@@ -7,9 +7,9 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
  *  - /api/webhook (Meta must reach it without a cookie)
  *  - Next.js internals / static assets (excluded by the matcher below)
  */
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/webhook"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/webhook", "/api/health"];
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {

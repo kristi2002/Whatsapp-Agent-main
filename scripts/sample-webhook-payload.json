@@ -1,0 +1,32 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "1041062138271233",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15556523157",
+              "phone_number_id": "1142465592289974"
+            },
+            "contacts": [
+              { "profile": { "name": "Cliente Test" }, "wa_id": "393330000000" }
+            ],
+            "messages": [
+              {
+                "from": "393330000000",
+                "id": "wamid.SMOKE_TEST_0001",
+                "timestamp": "1720180800",
+                "type": "text",
+                "text": { "body": "Ciao, vorrei prenotare un taglio donna" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

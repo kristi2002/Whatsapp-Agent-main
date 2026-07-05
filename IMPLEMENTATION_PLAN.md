@@ -177,8 +177,16 @@ Also hardened in this pass: webhook signature verification (`WHATSAPP_APP_SECRET
 ---
 
 ## 8. Verification done
-- `tsc --noEmit` on all new/changed library modules: **passes** (0 errors).
-- Availability engine unit tests: **11/11 pass** — DST (summer/winter), midday
-  break exclusion, busy-slot overlap, min lead time, closed days.
-- Next.js build + live WhatsApp round-trip: to be run in your environment with
-  real credentials (couldn't run here without secrets).
+- `npm run typecheck` (`tsc --noEmit`): **passes** (0 errors).
+- `npm run lint`: **passes** (0 errors).
+- `npm test` (Vitest): **60 tests pass** across 8 files — availability engine
+  (DST summer/winter, midday break, busy-slot overlap, min lead time, closed
+  days, grouping), timezone helpers, session auth, webhook signature +
+  processing, AI tool loop, tools dispatcher, booking validation, WhatsApp send.
+  See `TESTING.md` for the layout.
+- `npm run build`: **passes** with no secrets (all external clients are
+  lazily constructed).
+- CI runs all of the above on push/PR (`.github/workflows/ci.yml`).
+- Live WhatsApp round-trip: to be run in your environment with real credentials
+  (needs Meta + OpenRouter + Supabase configured). Use `scripts/smoke.sh`
+  against a running server to check the unauthenticated routes first.

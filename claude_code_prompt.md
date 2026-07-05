@@ -20,7 +20,7 @@ User sends WhatsApp message
 - **Database**: Supabase (PostgreSQL) with Supabase JS client
 - **AI**: OpenRouter API (OpenAI-compatible SDK)
 - **Styling**: Tailwind CSS
-- **Deployment**: Vercel or any Node.js host
+- **Deployment**: Hetzner + Coolify (self-hosted Node.js + Supabase)
 
 ## Meta WhatsApp API Reference
 
@@ -181,7 +181,7 @@ In the POST webhook handler, before calling the AI:
 - `POST /api/conversations/[id]/send` — send a manual message from dashboard (calls Meta API + stores in DB)
 
 ### Step 7: Deployment & Webhook Setup
-- Deploy to Vercel (or use ngrok for local testing)
+- Deploy to Hetzner + Coolify (see DEPLOY.md)
 - Set the production webhook URL in Meta App > WhatsApp > Configuration
 - Verify webhook with the chosen verify token
 - Subscribe to "messages" event

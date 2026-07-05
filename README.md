@@ -85,18 +85,17 @@ alter publication supabase_realtime add table conversations;
 npm run dev
 ```
 
-### 5. Expose your local server
+### 5. Deploy to get a public URL
 
-Use ngrok (or deploy to Vercel) to get a public URL:
-
-```bash
-ngrok http 3000
-```
+Meta's webhook needs a public HTTPS URL. Deploy to **Hetzner + Coolify** — see
+[`DEPLOY.md`](./DEPLOY.md) for the full runbook. Coolify issues Let's Encrypt
+certificates automatically, so your app is reachable at e.g.
+`https://bot.iltuosalone.it`.
 
 ### 6. Configure the Meta webhook
 
 1. Go to [Meta App Dashboard](https://developers.facebook.com) > your app > WhatsApp > Configuration
-2. Set webhook URL to `https://your-url.com/api/webhook`
+2. Set webhook URL to `https://your-domain.com/api/webhook`
 3. Set verify token to match your `WHATSAPP_VERIFY_TOKEN`
 4. Subscribe to the **messages** field
 
@@ -119,15 +118,24 @@ ngrok http 3000
 - **Manual send:** Type and send messages from the dashboard in either mode
 - **Real-time:** New messages appear instantly via Supabase Realtime
 
-## Deployment
-
-Deploy to Vercel:
+## Testing
 
 ```bash
-vercel
+npm test           # unit suite (60 tests) — no secrets or services needed
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint
+npm run build      # production build (works without secrets)
 ```
 
-Then update your Meta webhook URL to point to your Vercel deployment.
+CI runs all of these on push/PR (`.github/workflows/ci.yml`). For an end-to-end
+smoke test against a running server, see `TESTING.md` and `scripts/smoke.sh`.
+
+## Deployment
+
+Deployed on **Hetzner + Coolify** with self-hosted Supabase. The full,
+copy-pasteable runbook (server, Coolify, Supabase, app, Meta webhook, backups)
+is in [`DEPLOY.md`](./DEPLOY.md). After deploying, point your Meta webhook URL at
+`https://your-domain.com/api/webhook`.
 
 ---
 
@@ -201,23 +209,19 @@ npm run dev
 
 The app will start on http://localhost:3000. Open it in your browser — you should see the dashboard with an empty conversation list.
 
-### Step 8: Expose Your Local Server
+### Step 8: Deploy to Hetzner + Coolify
 
-Meta needs a public HTTPS URL to send webhooks to. Use ngrok:
-
-```bash
-# Install ngrok if you haven't: https://ngrok.com/download
-ngrok http 3000
-```
-
-Copy the `https://` forwarding URL (e.g. `https://abc123.ngrok-free.app`).
+Meta needs a public HTTPS URL to send webhooks to. Deploy the app to your Hetzner
+server via Coolify — follow the runbook in [`DEPLOY.md`](./DEPLOY.md). Coolify
+provisions HTTPS (Let's Encrypt) automatically, giving you a URL like
+`https://bot.iltuosalone.it`. Note that domain for the next step.
 
 ### Step 9: Configure the Webhook in Meta
 
 1. Go to https://developers.facebook.com > your app > WhatsApp > **Configuration**
 2. Under "Webhook", click **Edit**
-3. Set the **Callback URL** to: `https://your-ngrok-url.ngrok-free.app/api/webhook`
-4. Set the **Verify Token** to the same value as your `WHATSAPP_VERIFY_TOKEN` in `.env.local`
+3. Set the **Callback URL** to: `https://your-domain.com/api/webhook`
+4. Set the **Verify Token** to the same value as your `WHATSAPP_VERIFY_TOKEN`
 5. Click **Verify and Save**
 6. Under "Webhook Fields", click **Manage** and subscribe to **messages**
 
@@ -234,16 +238,14 @@ If using the Meta test phone number:
 1. Open WhatsApp on your phone
 2. Send a message to the Meta test phone number (shown in API Setup)
 3. You should receive an AI-generated reply within a few seconds
-4. Open the dashboard at http://localhost:3000 — the conversation should appear in the sidebar
+4. Open the dashboard at `https://your-domain.com` (log in at `/login`) — the conversation should appear in the sidebar
 
-### Step 12: Deploy to Production (Optional)
+### Step 12: Go Live & Ops
 
-1. Push your code to GitHub
-2. Import the project on https://vercel.com
-3. Add all your environment variables in Vercel's project settings
-4. Deploy — Vercel will give you a production URL
-5. Go back to Meta > WhatsApp > Configuration and update the webhook URL to your Vercel URL
-6. Remove the ngrok dependency — you're live!
+1. In Coolify, enable **automatic deploys** on push to `main`
+2. Set up **Postgres backups** for the Supabase volume (nightly) and store them off-box
+3. Swap the Meta **test** number for your business number when ready
+4. See [`DEPLOY.md`](./DEPLOY.md) §6.6 for the full ops checklist
 
 ### Troubleshooting
 
