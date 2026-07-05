@@ -20,8 +20,8 @@ test number; step 7 covers going live. Copy-paste env block is in §5.
    ~10 containers and wants the RAM.
 2. Ubuntu 22.04/24.04. Add your SSH key.
 3. Point two DNS records at the server IP:
-   - `bot.iltuosalone.it`  → the app
-   - `db.iltuosalone.it`   → Supabase Studio/API
+   - `agent.testdemo.it`  → the app
+   - `db.testdemo.it`     → Supabase Studio/API (already live)
 
 ## 2. Install Coolify
 SSH in and run:
@@ -35,10 +35,10 @@ provider (GitHub/GitLab) so Coolify can pull this repo.
 1. Coolify → **Projects → New → Resource → Service → Supabase**.
 2. Set a strong Postgres password and let it generate `JWT_SECRET`, the `anon`
    key and the `service_role` key.
-3. Assign domain `db.iltuosalone.it`, enable HTTPS (Let's Encrypt), deploy.
+3. Assign domain `db.testdemo.it`, enable HTTPS (Let's Encrypt), deploy.
 4. Once up, open **Supabase Studio** and note three values — these fill the blanks
    in `.env.local` / §5:
-   - **Project/API URL**  → `NEXT_PUBLIC_SUPABASE_URL`  (e.g. `https://db.iltuosalone.it`)
+   - **Project/API URL**  → `NEXT_PUBLIC_SUPABASE_URL`  (e.g. `https://db.testdemo.it`)
    - **anon public key**  → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - **service_role key** → `SUPABASE_SERVICE_ROLE_KEY`
 5. **Run the schema:** Studio → **SQL Editor** → paste the entire contents of
@@ -51,16 +51,27 @@ provider (GitHub/GitLab) so Coolify can pull this repo.
    `business_hours` rows to match Max&Tony Nazionale.
 
 ## 4. Deploy the Next.js app
-1. Coolify → **New → Application → from Git repository** → pick this repo/branch.
-2. Build pack: **Nixpacks** (auto-detects Next.js). Confirm:
-   - Install: `npm install`
+1. Coolify → **New → Application → from Git repository** → pick this repo, branch
+   `main`.
+2. Build pack: **Nixpacks** (auto-detects Next.js; Node pinned to 22 via `.nvmrc`).
+   Confirm:
+   - Install: `npm ci`  (or `npm install`)
    - Build: `npm run build`
    - Start: `npm run start`
    - Port: `3000`
-3. Assign domain `bot.iltuosalone.it`, enable HTTPS.
-4. Add the environment variables (§5), then **Deploy**.
-5. It runs as a persistent Node server, so the webhook's "reply 200 immediately,
+3. **Add the environment variables (§5) BEFORE the first deploy.** This matters:
+   the two `NEXT_PUBLIC_*` values are inlined into the browser bundle **at build
+   time**, so if they're missing when Coolify builds, the dashboard's realtime
+   won't connect until you re-deploy with them set.
+4. Assign the app domain `agent.testdemo.it`, enable HTTPS (Let's Encrypt).
+5. **Health check:** point Coolify's health check at `GET /api/health` (returns
+   `{"status":"ok"}`, needs no auth) so Coolify knows when the app is live.
+6. **Deploy.** Enable "automatic deploy on push to `main`" if you want CI-style redeploys.
+7. It runs as a persistent Node server, so the webhook's "reply 200 immediately,
    process in the background" works correctly (no Meta retry / duplicate replies).
+
+> Verified locally with the exact Coolify commands: `npm run build` then
+> `npm run start` boots and serves `/api/health` → 200.
 
 ## 5. Environment variables (paste into Coolify → app → Environment)
 
@@ -90,7 +101,7 @@ Never commit real values here — keep them in `.env.local` and in Coolify only.
 
 ## 6. Connect + test on the WhatsApp test number
 1. Meta App → **WhatsApp → Configuration → Webhook → Edit**:
-   - Callback URL: `https://bot.iltuosalone.it/api/webhook`
+   - Callback URL: `https://agent.testdemo.it/api/webhook`
    - Verify token: `salon-4fa0026916cca690`
    - Save (Meta calls GET to verify — should succeed instantly).
 2. Under **Webhook fields**, subscribe to **messages**.

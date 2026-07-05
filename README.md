@@ -90,7 +90,7 @@ npm run dev
 Meta's webhook needs a public HTTPS URL. Deploy to **Hetzner + Coolify** — see
 [`DEPLOY.md`](./DEPLOY.md) for the full runbook. Coolify issues Let's Encrypt
 certificates automatically, so your app is reachable at e.g.
-`https://bot.iltuosalone.it`.
+`https://agent.testdemo.it`.
 
 ### 6. Configure the Meta webhook
 
@@ -214,7 +214,7 @@ The app will start on http://localhost:3000. Open it in your browser — you sho
 Meta needs a public HTTPS URL to send webhooks to. Deploy the app to your Hetzner
 server via Coolify — follow the runbook in [`DEPLOY.md`](./DEPLOY.md). Coolify
 provisions HTTPS (Let's Encrypt) automatically, giving you a URL like
-`https://bot.iltuosalone.it`. Note that domain for the next step.
+`https://agent.testdemo.it`. Note that domain for the next step.
 
 ### Step 9: Configure the Webhook in Meta
 
