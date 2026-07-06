@@ -176,18 +176,30 @@ export async function checkAvailability(params: {
     };
   }
 
-  const { data: appts } = await supabase
-    .from("appointments")
-    .select("stylist_id, starts_at, ends_at, status")
-    .in("status", ["booked", "completed"])
-    .lt("starts_at", dayEnd.toISOString())
-    .gt("ends_at", dayStart.toISOString());
+  const weekday = weekdayOf(params.date);
+  const consideredIds = consider.map((s) => s.id);
 
-  const busy: BusyInterval[] = (appts ?? []).map((a) => ({
+  const [apptsRes, shRes, offRes] = await Promise.all([
+    supabase.from("appointments").select("stylist_id, starts_at, ends_at, status").in("status", ["booked", "completed"]).lt("starts_at", dayEnd.toISOString()).gt("ends_at", dayStart.toISOString()),
+    consideredIds.length ? supabase.from("stylist_hours").select("*").eq("day_of_week", weekday).in("stylist_id", consideredIds) : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
+    consideredIds.length ? supabase.from("stylist_time_off").select("stylist_id, starts_at, ends_at").in("stylist_id", consideredIds).lt("starts_at", dayEnd.toISOString()).gt("ends_at", dayStart.toISOString()) : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
+  ]);
+
+  const busy: BusyInterval[] = (apptsRes.data ?? []).map((a) => ({
     stylist_id: a.stylist_id,
     startMs: new Date(a.starts_at).getTime(),
     endMs: new Date(a.ends_at).getTime(),
   }));
+  // Time-off blocks the stylist like a busy interval.
+  for (const t of (offRes.data ?? []) as Array<{ stylist_id: string; starts_at: string; ends_at: string }>) {
+    busy.push({ stylist_id: t.stylist_id, startMs: new Date(t.starts_at).getTime(), endMs: new Date(t.ends_at).getTime() });
+  }
+
+  // Per-stylist hours (if configured). A row with is_working=false means off.
+  const stylistHours = new Map<string, BusinessHours | null>();
+  for (const r of (shRes.data ?? []) as Array<{ stylist_id: string; is_working: boolean; open_time: string | null; close_time: string | null; break_start: string | null; break_end: string | null }>) {
+    stylistHours.set(r.stylist_id, r.is_working === false ? null : { day_of_week: weekday, is_closed: !r.is_working, open_time: r.open_time, close_time: r.close_time, break_start: r.break_start, break_end: r.break_end });
+  }
 
   const slots = computeAvailability({
     dateLocal: params.date,
@@ -197,6 +209,7 @@ export async function checkAvailability(params: {
     hours,
     busy,
     now,
+    stylistHours,
   });
 
   const grouped = groupSlotsByTime(slots).slice(0, BOOKING.maxSlotsReturned);

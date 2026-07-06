@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Plus, FlaskConical } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Button, Modal, Field, Input, Select, Badge } from "@/components/ui";
 import { Filters, FilterField } from "@/components/data-ui";
@@ -37,6 +38,7 @@ export default function CalendarPage() {
   const [hStart, setHStart] = useState(8);
   const [hEnd, setHEnd] = useState(20);
   const [stylistFilter, setStylistFilter] = useState("");
+  const router = useRouter();
 
   const loadAppts = useCallback(async (d: string) => {
     setLoading(true);
@@ -72,7 +74,22 @@ export default function CalendarPage() {
     setOpen(false); loadAppts(date);
   }
   async function setStatus(id: string, status: string) { await fetch(`/api/appointments/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }); setSelected(null); loadAppts(date); }
-  async function cancel(id: string) { await fetch(`/api/appointments/${id}`, { method: "DELETE" }); setSelected(null); loadAppts(date); }
+  async function cancel(id: string) {
+    await fetch(`/api/appointments/${id}`, { method: "DELETE" }); setSelected(null); loadAppts(date);
+    const wl = await fetch("/api/waitlist").then((r) => r.json()).catch(() => []);
+    if (Array.isArray(wl) && wl.length > 0 && confirm(`Ci sono ${wl.length} clienti in lista d'attesa. Vuoi aprirla per riempire il posto?`)) router.push("/attesa");
+  }
+
+  const isColor = (a: AppointmentWithRelations | null) => !!(a?.service?.category && a.service.category.toLowerCase().includes("colore"));
+  async function openColorSheet(a: AppointmentWithRelations) {
+    const c = await fetch(`/api/clients?phone=${encodeURIComponent(a.customer_phone)}`).then((r) => r.json()).catch(() => null);
+    if (c?.id) router.push(`/clienti/${c.id}?color=${a.id}&stylist=${a.stylist_id}`);
+    else alert("Cliente non trovato per questo numero.");
+  }
+  async function completeAppt(a: AppointmentWithRelations) {
+    await setStatus(a.id, "completed");
+    if (isColor(a) && confirm("Compilare la scheda colore per questo cliente?")) openColorSheet(a);
+  }
 
   return (
     <AppShell title="Calendario" actions={<Button size="sm" onClick={() => openNew()}><Plus size={15} /> <span className="hidden sm:inline">Nuovo</span></Button>}>
@@ -150,11 +167,12 @@ export default function CalendarPage() {
             <div className="space-y-2 text-sm mb-4">
               <div className="flex justify-between"><span className="text-muted">Cliente</span><span style={{ color: "var(--text)" }}>{selected.customer_name || "—"}</span></div>
               <div className="flex justify-between"><span className="text-muted">Telefono</span><span style={{ color: "var(--text)" }}>{selected.customer_phone}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Origine</span><Badge tone="neutral">{selected.source === "whatsapp" ? "WhatsApp" : selected.source === "gestionale" ? "Gestionale" : "Telefono"}</Badge></div>
+              <div className="flex justify-between"><span className="text-muted">Origine</span><Badge tone="neutral">{selected.source === "whatsapp" ? "WhatsApp" : selected.source === "gestionale" ? "Gestionale" : selected.source === "online" ? "Online" : "Telefono"}</Badge></div>
               {selected.notes && <div className="flex justify-between gap-4"><span className="text-muted">Note</span><span className="text-right" style={{ color: "var(--text)" }}>{selected.notes}</span></div>}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              {selected.status === "booked" && <><Button variant="secondary" size="sm" onClick={() => setStatus(selected.id, "completed")}>Completato</Button><Button variant="secondary" size="sm" onClick={() => setStatus(selected.id, "no_show")}>Assente</Button></>}
+              {isColor(selected) && <Button variant="secondary" size="sm" onClick={() => openColorSheet(selected)}><FlaskConical size={13} /> Scheda colore</Button>}
+              {selected.status === "booked" && <><Button variant="secondary" size="sm" onClick={() => completeAppt(selected)}>Completato</Button><Button variant="secondary" size="sm" onClick={() => setStatus(selected.id, "no_show")}>Assente</Button></>}
               <Button variant="danger" size="sm" onClick={() => cancel(selected.id)}>Annulla appuntamento</Button>
             </div>
           </div>

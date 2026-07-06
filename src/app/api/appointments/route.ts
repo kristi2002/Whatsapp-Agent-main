@@ -4,7 +4,7 @@ import { SALON } from "@/lib/salon-config";
 import { zonedWallTimeToUtc } from "@/lib/timezone";
 
 const SELECT =
-  "*, service:services(name,duration_min,price_cents), stylist:stylists(name)";
+  "*, service:services(name,duration_min,price_cents,category), stylist:stylists(name)";
 
 /** GET /api/appointments?from=YYYY-MM-DD&to=YYYY-MM-DD (local Rome dates, inclusive). */
 export async function GET(request: NextRequest) {

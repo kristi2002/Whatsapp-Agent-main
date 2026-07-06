@@ -228,3 +228,30 @@ describe("groupSlotsByTime", () => {
     expect(grouped[1].stylists.map((s) => s.id)).toEqual(["g"]);
   });
 });
+
+describe("computeAvailability — per-stylist hours & time-off", () => {
+  it("constrains a stylist to their own hours (intersected with salon)", () => {
+    const stylistHours = new Map<string, BusinessHours | null>([
+      ["g", { day_of_week: 2, is_closed: false, open_time: "10:00", close_time: "14:00", break_start: null, break_end: null }],
+    ]);
+    const slots = computeAvailability({ dateLocal: DATE, durationMin: 45, timeZone: TZ, stylists: [G], hours: HOURS_OPEN, busy: [], now: NOW_EARLY, stylistHours });
+    expect(slots[0].startUtc.getTime()).toBe(romeMs(10, 0));
+    const times = new Set(slots.map((s) => s.startUtc.getTime()));
+    expect(times.has(romeMs(9, 0))).toBe(false);
+    expect(times.has(romeMs(13, 15))).toBe(true);
+    expect(times.has(romeMs(13, 30))).toBe(false);
+  });
+  it("gives no slots for a stylist marked off that day, others unaffected", () => {
+    const stylistHours = new Map<string, BusinessHours | null>([["g", null]]);
+    const slots = computeAvailability({ dateLocal: DATE, durationMin: 45, timeZone: TZ, stylists: [G, T], hours: HOURS_OPEN, busy: [], now: NOW_EARLY, stylistHours });
+    expect(slots.some((s) => s.stylistId === "g")).toBe(false);
+    expect(slots.filter((s) => s.stylistId === "t").length).toBe(38);
+  });
+  it("treats time-off as busy and blocks those slots", () => {
+    const busy: BusyInterval[] = [{ stylist_id: "g", startMs: romeMs(10, 0), endMs: romeMs(12, 0) }];
+    const slots = computeAvailability({ dateLocal: DATE, durationMin: 45, timeZone: TZ, stylists: [G], hours: HOURS_OPEN, busy, now: NOW_EARLY });
+    const times = new Set(slots.map((s) => s.startUtc.getTime()));
+    expect(times.has(romeMs(10, 30))).toBe(false);
+    expect(times.has(romeMs(12, 0))).toBe(true);
+  });
+});

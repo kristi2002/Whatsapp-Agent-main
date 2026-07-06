@@ -57,7 +57,7 @@ export interface Appointment {
   starts_at: string; // ISO timestamptz (UTC)
   ends_at: string;
   status: AppointmentStatus;
-  source: "whatsapp" | "gestionale" | "phone";
+  source: "whatsapp" | "gestionale" | "phone" | "online";
   notes: string | null;
   created_at: string;
   updated_at: string;

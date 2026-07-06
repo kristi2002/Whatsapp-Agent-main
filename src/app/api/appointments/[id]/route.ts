@@ -12,6 +12,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const b = await request.json();
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
+  // For auto-scarico: know the previous status + service if we are completing.
+  let prev: { status: string; service_id: string } | null = null;
+  if (b.status === "completed") {
+    const { data } = await supabase.from("appointments").select("status, service_id").eq("id", id).single();
+    prev = data as { status: string; service_id: string } | null;
+  }
+
   if (b.status !== undefined) {
     if (!STATUSES.includes(b.status)) return Response.json({ error: "Stato non valido." }, { status: 400 });
     update.status = b.status;
@@ -39,6 +46,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (error.code === "23P01") return Response.json({ error: "Sovrapposizione con un altro appuntamento di questo parrucchiere." }, { status: 409 });
     return Response.json({ error: error.message }, { status: 500 });
   }
+
+  // Auto-scarico: on first transition to completed, decrement the service's consumables.
+  if (b.status === "completed" && prev && prev.status !== "completed" && prev.service_id) {
+    const { data: sp } = await supabase.from("service_products").select("product_id, qty").eq("service_id", prev.service_id);
+    for (const row of sp ?? []) {
+      const { data: prod } = await supabase.from("products").select("stock_qty").eq("id", row.product_id).single();
+      if (prod) {
+        await supabase.from("stock_movements").insert({ product_id: row.product_id, delta: -row.qty, reason: "servizio", ref: id });
+        await supabase.from("products").update({ stock_qty: Math.max(0, prod.stock_qty - row.qty) }).eq("id", row.product_id);
+      }
+    }
+  }
+
   return Response.json(data);
 }
 

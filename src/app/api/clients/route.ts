@@ -1,7 +1,12 @@
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const phone = request.nextUrl.searchParams.get("phone");
+  if (phone) {
+    const { data } = await supabase.from("clients").select("*").eq("phone", phone).single();
+    return Response.json(data ?? null);
+  }
   const { data, error } = await supabase.from("clients").select("*").order("name", { nullsFirst: false });
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json(data);

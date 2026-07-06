@@ -8,7 +8,7 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
  *  - /privacy (public privacy policy — Meta requires a reachable URL to go Live)
  *  - Next.js internals / static assets (excluded by the matcher below)
  */
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/webhook", "/api/health", "/privacy"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/webhook", "/api/health", "/privacy", "/prenota", "/api/public", "/api/cron"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
