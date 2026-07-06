@@ -5,9 +5,10 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
  * Protects the dashboard and its data APIs. Public exceptions:
  *  - /login and the auth endpoints (so you can actually log in)
  *  - /api/webhook (Meta must reach it without a cookie)
+ *  - /privacy (public privacy policy — Meta requires a reachable URL to go Live)
  *  - Next.js internals / static assets (excluded by the matcher below)
  */
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/webhook", "/api/health"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/webhook", "/api/health", "/privacy"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
