@@ -83,3 +83,6 @@ body {
 .thin-scroll::-webkit-scrollbar-track { background: transparent; }
 
 input, select, textarea { font-family: inherit; }
+
+.zebra-alt { background: var(--surface-2); }
+.dark .zebra-alt { background: transparent; }

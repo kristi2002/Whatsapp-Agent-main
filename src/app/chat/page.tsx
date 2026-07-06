@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Send, Bot, User } from "lucide-react";
+import { Send, Bot, User, ArrowLeft, Search } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Badge } from "@/components/ui";
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
@@ -21,6 +21,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [q, setQ] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const selected = conversations.find((c) => c.id === selectedId);
 
@@ -57,13 +58,21 @@ export default function ChatPage() {
     setInput(""); setSending(false); fetchMessages(selectedId);
   }
 
+  const filtered = conversations.filter((c) => !q || `${c.name ?? ""} ${c.phone}`.toLowerCase().includes(q.toLowerCase()));
+
   return (
     <AppShell title="Conversazioni" subtitle={`${conversations.length} chat`} bare>
       <div className="flex h-full">
-        <div className="w-80 shrink-0 bd-r flex flex-col" style={{ background: "var(--surface)" }}>
+        <div className={`${selectedId ? "hidden md:flex" : "flex"} w-full md:w-80 shrink-0 bd-r flex-col`} style={{ background: "var(--surface)" }}>
+          <div className="p-3 bd-b shrink-0">
+            <div className="flex items-center gap-2 h-9 px-3 rounded-lg" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+              <Search size={15} className="text-faint shrink-0" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca…" className="flex-1 bg-transparent text-sm outline-none" style={{ color: "var(--text)" }} />
+            </div>
+          </div>
           <div className="flex-1 overflow-y-auto thin-scroll">
-            {conversations.length === 0 && <p className="text-xs text-faint text-center mt-10">Nessuna conversazione.</p>}
-            {conversations.map((c) => {
+            {filtered.length === 0 && <p className="text-xs text-faint text-center mt-10">Nessuna conversazione.</p>}
+            {filtered.map((c) => {
               const active = selectedId === c.id;
               return (
                 <button key={c.id} onClick={() => setSelectedId(c.id)} className="w-full text-left px-4 py-3 bd-b hover-surface transition-colors" style={active ? { background: "var(--surface-2)" } : undefined}>
@@ -86,28 +95,29 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-w-0" style={{ background: "var(--bg)" }}>
+        <div className={`${selectedId ? "flex" : "hidden md:flex"} flex-1 flex-col min-w-0`} style={{ background: "var(--bg)" }}>
           {!selected ? (
             <div className="flex-1 flex items-center justify-center"><p className="text-sm text-faint">Seleziona una conversazione</p></div>
           ) : (
             <>
-              <div className="flex items-center justify-between gap-3 px-5 h-14 bd-b shrink-0" style={{ background: "var(--surface)" }}>
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}>{initials(selected.name, selected.phone)}</div>
+              <div className="flex items-center gap-3 px-4 sm:px-5 h-14 bd-b shrink-0" style={{ background: "var(--surface)" }}>
+                <button onClick={() => setSelectedId(null)} className="md:hidden w-8 h-8 -ml-1 rounded-lg flex items-center justify-center text-muted hover-surface shrink-0" aria-label="Indietro"><ArrowLeft size={18} /></button>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}>{initials(selected.name, selected.phone)}</div>
                   <div className="min-w-0"><p className="text-sm font-semibold truncate" style={{ color: "var(--text)" }}>{selected.name || selected.phone}</p><p className="text-xs text-muted">{selected.phone}</p></div>
                 </div>
-                <button onClick={toggleMode} className="flex items-center gap-2 h-8 px-3 rounded-lg text-xs font-medium" style={{ background: selected.mode === "agent" ? "var(--success-soft)" : "var(--warning-soft)", color: selected.mode === "agent" ? "var(--success)" : "var(--warning)" }}>
-                  {selected.mode === "agent" ? <Bot size={14} /> : <User size={14} />}{selected.mode === "agent" ? "Assistente AI" : "Manuale"}
+                <button onClick={toggleMode} className="flex items-center gap-2 h-8 px-3 rounded-lg text-xs font-medium shrink-0" style={{ background: selected.mode === "agent" ? "var(--success-soft)" : "var(--warning-soft)", color: selected.mode === "agent" ? "var(--success)" : "var(--warning)" }}>
+                  {selected.mode === "agent" ? <Bot size={14} /> : <User size={14} />}<span className="hidden sm:inline">{selected.mode === "agent" ? "Assistente AI" : "Manuale"}</span>
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto thin-scroll px-6 py-5 space-y-3">
+              <div className="flex-1 overflow-y-auto thin-scroll px-4 sm:px-6 py-5 space-y-3">
                 {messages.map((m, i) => {
                   const isUser = m.role === "user";
                   const showTime = i === messages.length - 1 || messages[i + 1]?.role !== m.role;
                   return (
                     <div key={m.id} className={`flex ${isUser ? "justify-start" : "justify-end"}`}>
-                      <div className={`flex flex-col ${isUser ? "items-start" : "items-end"} max-w-[70%]`}>
+                      <div className={`flex flex-col ${isUser ? "items-start" : "items-end"} max-w-[80%] sm:max-w-[70%]`}>
                         <div className="px-3.5 py-2 rounded-2xl text-sm leading-relaxed" style={isUser ? { background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", borderTopLeftRadius: 4 } : { background: "var(--accent)", color: "var(--accent-fg)", borderTopRightRadius: 4 }}>
                           <p className="whitespace-pre-wrap">{m.content}</p>
                         </div>
@@ -119,10 +129,10 @@ export default function ChatPage() {
                 <div ref={endRef} />
               </div>
 
-              <div className="px-5 py-3 bd-b shrink-0" style={{ background: "var(--surface)", borderBottom: "none", borderTop: "1px solid var(--border)" }}>
+              <div className="px-4 sm:px-5 py-3 shrink-0" style={{ background: "var(--surface)", borderTop: "1px solid var(--border)" }}>
                 <div className="flex items-center gap-3 rounded-xl px-4 py-2" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
                   <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()} placeholder="Scrivi un messaggio…" className="flex-1 bg-transparent text-sm outline-none" style={{ color: "var(--text)" }} />
-                  <button onClick={handleSend} disabled={sending || !input.trim()} className="w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-30 transition-opacity" style={{ background: "var(--accent)", color: "var(--accent-fg)" }} aria-label="Invia"><Send size={15} /></button>
+                  <button onClick={handleSend} disabled={sending || !input.trim()} className="w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-30 transition-opacity shrink-0" style={{ background: "var(--accent)", color: "var(--accent-fg)" }} aria-label="Invia"><Send size={15} /></button>
                 </div>
               </div>
             </>

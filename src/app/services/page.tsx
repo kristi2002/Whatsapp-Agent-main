@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Plus, Pencil } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import { Card, Button, Badge, Modal, Field, Input } from "@/components/ui";
+import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
+import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
 import type { ServiceRow } from "@/lib/gestionale-types";
 
 const empty = { name: "", category: "", duration_min: "45", price_euro: "" };
@@ -16,13 +17,26 @@ export default function ServicesPage() {
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState("");
+  const [status, setStatus] = useState("active");
 
   const load = useCallback(async () => { setServices(await fetch("/api/services").then((r) => r.json())); setLoading(false); }, []);
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ load(); }, [load]);
 
+  const categories = useMemo(() => Array.from(new Set(services.map((s) => s.category).filter(Boolean))) as string[], [services]);
+  const filtered = useMemo(() => services.filter((s) => {
+    if (status === "active" && !s.active) return false;
+    if (status === "inactive" && s.active) return false;
+    if (cat && s.category !== cat) return false;
+    if (q && !s.name.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  }), [services, q, cat, status]);
+  const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 12);
+  const activeFilters = (q ? 1 : 0) + (cat ? 1 : 0) + (status !== "active" ? 1 : 0);
+
   function openNew() { setForm(empty); setEditing("new"); setError(""); }
   function openEdit(s: ServiceRow) { setForm({ name: s.name, category: s.category ?? "", duration_min: String(s.duration_min), price_euro: s.price_cents == null ? "" : (s.price_cents / 100).toFixed(2) }); setEditing(s.id); setError(""); }
-
   async function save() {
     setSaving(true); setError("");
     const payload = { name: form.name, category: form.category, duration_min: Number(form.duration_min), price_cents: form.price_euro === "" ? null : Math.round(Number(form.price_euro.replace(",", ".")) * 100) };
@@ -34,26 +48,39 @@ export default function ServicesPage() {
   async function toggle(s: ServiceRow) { await fetch(`/api/services/${s.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: !s.active }) }); load(); }
 
   return (
-    <AppShell title="Servizi" subtitle="I servizi attivi vengono proposti automaticamente in chat." actions={<Button size="sm" onClick={openNew}><Plus size={15} /> Aggiungi</Button>}>
+    <AppShell title="Servizi" subtitle="I servizi attivi vengono proposti automaticamente in chat." actions={<Button size="sm" onClick={openNew}><Plus size={15} /> <span className="hidden sm:inline">Aggiungi</span></Button>}>
+      <Filters activeCount={activeFilters} onReset={() => { setQ(""); setCat(""); setStatus("active"); }}>
+        <FilterField label="Cerca"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome servizio" /></FilterField>
+        <FilterField label="Categoria"><Select value={cat} onChange={(e) => setCat(e.target.value)}><option value="">Tutte</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}</Select></FilterField>
+        <FilterField label="Stato"><Select value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">Attivi</option><option value="inactive">Disattivati</option><option value="all">Tutti</option></Select></FilterField>
+      </Filters>
+
       {loading ? <p className="text-sm text-muted">Caricamento…</p> : (
-        <Card className="overflow-hidden">
-          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-5 py-2.5 bd-b text-[11px] uppercase tracking-wide text-faint">
-            <span>Nome</span><span>Categoria</span><span className="text-right">Durata</span><span className="text-right">Prezzo</span><span></span>
-          </div>
-          {services.map((s) => (
-            <div key={s.id} className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-5 py-3 bd-b last:border-b-0 ${s.active ? "" : "opacity-40"}`}>
-              <span className="text-sm" style={{ color: "var(--text)" }}>{s.name}</span>
-              <span>{s.category ? <Badge tone="accent">{s.category}</Badge> : <span className="text-faint text-xs">—</span>}</span>
-              <span className="text-sm text-muted text-right tabular-nums">{s.duration_min}′</span>
-              <span className="text-sm text-muted text-right tabular-nums">{euro(s.price_cents)}</span>
-              <div className="flex items-center gap-3 justify-end">
-                <button onClick={() => toggle(s)} className="text-xs text-muted hover:opacity-70">{s.active ? "Disattiva" : "Attiva"}</button>
-                <button onClick={() => openEdit(s)} className="text-accent hover:opacity-70" title="Modifica"><Pencil size={14} /></button>
+        <>
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto thin-scroll">
+              <div className="min-w-[520px]">
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-5 py-2.5 bd-b text-[11px] uppercase tracking-wide text-faint">
+                  <span>Nome</span><span>Categoria</span><span className="text-right">Durata</span><span className="text-right">Prezzo</span><span></span>
+                </div>
+                {pageItems.map((s, i) => (
+                  <div key={s.id} className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-5 py-3 bd-b last:border-b-0 ${i % 2 === 1 ? "zebra-alt" : ""} ${s.active ? "" : "opacity-40"}`}>
+                    <span className="text-sm" style={{ color: "var(--text)" }}>{s.name}</span>
+                    <span>{s.category ? <Badge tone="accent">{s.category}</Badge> : <span className="text-faint text-xs">—</span>}</span>
+                    <span className="text-sm text-muted text-right tabular-nums">{s.duration_min}&#8242;</span>
+                    <span className="text-sm text-muted text-right tabular-nums">{euro(s.price_cents)}</span>
+                    <div className="flex items-center gap-3 justify-end">
+                      <button onClick={() => toggle(s)} className="text-xs text-muted hover:opacity-70">{s.active ? "Disattiva" : "Attiva"}</button>
+                      <button onClick={() => openEdit(s)} className="text-accent hover:opacity-70" title="Modifica"><Pencil size={14} /></button>
+                    </div>
+                  </div>
+                ))}
+                {filtered.length === 0 && <p className="text-sm text-faint px-5 py-8 text-center">Nessun servizio.</p>}
               </div>
             </div>
-          ))}
-          {services.length === 0 && <p className="text-sm text-faint px-5 py-8 text-center">Nessun servizio.</p>}
-        </Card>
+          </Card>
+          <Pagination page={page} pageCount={pageCount} total={total} onPage={setPage} />
+        </>
       )}
 
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing === "new" ? "Nuovo servizio" : "Modifica servizio"}>

@@ -4,21 +4,18 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Button, Modal, Field, Input, Select, Badge } from "@/components/ui";
+import { Filters, FilterField } from "@/components/data-ui";
 import type { AppointmentWithRelations, ServiceRow } from "@/lib/gestionale-types";
 
 const TZ = "Europe/Rome";
-const HOUR_START = 8;
-const HOUR_END = 20;
-const ROW_H = 64; // px per hour
+const ROW_H = 64;
 
 function todayLocal() { return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date()); }
 function shiftDay(date: string, d: number) { const [y, m, dd] = date.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1, dd + d)); return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(t); }
 function prettyDate(date: string) { const [y, m, d] = date.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("it-IT", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }); }
 function localMinutes(iso: string) {
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(iso));
-  let h = 0, m = 0;
-  for (const p of parts) { if (p.type === "hour") h = +p.value; if (p.type === "minute") m = +p.value; }
-  return (h % 24) * 60 + m;
+  let h = 0, m = 0; for (const p of parts) { if (p.type === "hour") h = +p.value; if (p.type === "minute") m = +p.value; } return (h % 24) * 60 + m;
 }
 function fmtTime(iso: string) { return new Date(iso).toLocaleTimeString("it-IT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }); }
 
@@ -37,6 +34,9 @@ export default function CalendarPage() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [hStart, setHStart] = useState(8);
+  const [hEnd, setHEnd] = useState(20);
+  const [stylistFilter, setStylistFilter] = useState("");
 
   const loadAppts = useCallback(async (d: string) => {
     setLoading(true);
@@ -44,7 +44,6 @@ export default function CalendarPage() {
     setAppts(Array.isArray(data) ? data.filter((a: AppointmentWithRelations) => a.status !== "cancelled") : []);
     setLoading(false);
   }, []);
-
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ loadAppts(date); }, [date, loadAppts]);
   useEffect(() => {
     Promise.all([fetch("/api/stylists").then((r) => r.json()), fetch("/api/services").then((r) => r.json())]).then(([st, sv]) => {
@@ -53,17 +52,18 @@ export default function CalendarPage() {
     });
   }, []);
 
-  const hours = useMemo(() => Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i), []);
+  const shown = useMemo(() => (stylistFilter ? stylists.filter((s) => s.id === stylistFilter) : stylists), [stylists, stylistFilter]);
+  const hours = useMemo(() => Array.from({ length: Math.max(1, hEnd - hStart) }, (_, i) => hStart + i), [hStart, hEnd]);
   const nowMin = localMinutes(new Date().toISOString());
   const isToday = date === todayLocal();
+  const activeFilters = (stylistFilter ? 1 : 0) + (hStart !== 8 || hEnd !== 20 ? 1 : 0);
+  const hourOpts = Array.from({ length: 16 }, (_, i) => i + 6);
 
   function openNew(stylistId?: string, hour?: number) {
     setSelected(null);
     setForm({ ...emptyForm, stylist_id: stylistId ?? "", time: hour != null ? `${String(hour).padStart(2, "0")}:00` : "10:00" });
-    setError("");
-    setOpen(true);
+    setError(""); setOpen(true);
   }
-
   async function create() {
     setSaving(true); setError("");
     const res = await fetch("/api/appointments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, date }) });
@@ -75,62 +75,52 @@ export default function CalendarPage() {
   async function cancel(id: string) { await fetch(`/api/appointments/${id}`, { method: "DELETE" }); setSelected(null); loadAppts(date); }
 
   return (
-    <AppShell
-      title="Calendario"
-      actions={<Button size="sm" onClick={() => openNew()}><Plus size={15} /> Nuovo</Button>}
-    >
-      <div className="flex items-center gap-2 mb-4">
+    <AppShell title="Calendario" actions={<Button size="sm" onClick={() => openNew()}><Plus size={15} /> <span className="hidden sm:inline">Nuovo</span></Button>}>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <button onClick={() => setDate(shiftDay(date, -1))} className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover-surface" style={{ border: "1px solid var(--border)" }}><ChevronLeft size={17} /></button>
         <button onClick={() => setDate(shiftDay(date, 1))} className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover-surface" style={{ border: "1px solid var(--border)" }}><ChevronRight size={17} /></button>
         <button onClick={() => setDate(todayLocal())} className="h-9 px-3 rounded-lg text-xs font-medium text-muted hover-surface" style={{ border: "1px solid var(--border)" }}>Oggi</button>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 px-2 rounded-lg text-sm" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }} />
-        <span className="text-sm text-muted ml-1 capitalize hidden sm:block">{prettyDate(date)}</span>
+        <span className="text-sm text-muted ml-1 capitalize hidden md:block">{prettyDate(date)}</span>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-muted">Caricamento…</p>
-      ) : stylists.length === 0 ? (
-        <p className="text-sm text-faint">Nessun membro dello staff attivo. Aggiungine in “Staff”.</p>
+      <Filters activeCount={activeFilters} onReset={() => { setStylistFilter(""); setHStart(8); setHEnd(20); }}>
+        <FilterField label="Parrucchiere"><Select value={stylistFilter} onChange={(e) => setStylistFilter(e.target.value)}><option value="">Tutti</option>{stylists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></FilterField>
+        <FilterField label="Dalle ore"><Select value={hStart} onChange={(e) => setHStart(Math.min(Number(e.target.value), hEnd - 1))}>{hourOpts.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}</Select></FilterField>
+        <FilterField label="Alle ore"><Select value={hEnd} onChange={(e) => setHEnd(Math.max(Number(e.target.value), hStart + 1))}>{hourOpts.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}</Select></FilterField>
+      </Filters>
+
+      {shown.length === 0 ? (
+        <p className="text-sm text-faint">{loading ? "Caricamento…" : "Nessun parrucchiere da mostrare."}</p>
       ) : (
-        <div className="card overflow-hidden" style={{ boxShadow: "var(--shadow)" }}>
+        <div className="card overflow-hidden" style={{ boxShadow: "var(--shadow)", minHeight: 620 }}>
           <div className="overflow-x-auto thin-scroll">
-            <div style={{ minWidth: 120 + stylists.length * 160 }}>
+            <div style={{ minWidth: 70 + shown.length * 150 }}>
               <div className="flex bd-b sticky top-0 z-10" style={{ background: "var(--surface)" }}>
                 <div className="w-[70px] shrink-0" />
-                {stylists.map((s) => (
-                  <div key={s.id} className="flex-1 min-w-[150px] px-3 py-2.5 text-center text-sm font-medium bd-r last:border-r-0" style={{ color: "var(--text)" }}>{s.name}</div>
-                ))}
+                {shown.map((s) => (<div key={s.id} className="flex-1 min-w-[140px] px-3 py-2.5 text-center text-sm font-medium bd-r last:border-r-0" style={{ color: "var(--text)" }}>{s.name}</div>))}
               </div>
               <div className="flex relative">
                 <div className="w-[70px] shrink-0">
-                  {hours.map((h) => (
-                    <div key={h} className="text-right pr-2 text-[11px] text-faint" style={{ height: ROW_H, transform: "translateY(-6px)" }}>{String(h).padStart(2, "0")}:00</div>
-                  ))}
+                  {hours.map((h) => (<div key={h} className="text-right pr-2 text-[11px] text-faint" style={{ height: ROW_H, transform: "translateY(-6px)" }}>{String(h).padStart(2, "0")}:00</div>))}
                 </div>
-                {stylists.map((s) => (
-                  <div key={s.id} className="flex-1 min-w-[150px] relative bd-r last:border-r-0">
-                    {hours.map((h) => (
-                      <div key={h} onClick={() => openNew(s.id, h)} className="cursor-pointer hover:bg-[var(--surface-2)] transition-colors" style={{ height: ROW_H, borderTop: "1px solid var(--border)" }} />
-                    ))}
+                {shown.map((s) => (
+                  <div key={s.id} className="flex-1 min-w-[140px] relative bd-r last:border-r-0">
+                    {hours.map((h) => (<div key={h} onClick={() => openNew(s.id, h)} className="cursor-pointer hover:bg-[var(--surface-2)] transition-colors" style={{ height: ROW_H, borderTop: "1px solid var(--border)" }} />))}
                     {appts.filter((a) => a.stylist_id === s.id).map((a) => {
-                      const start = localMinutes(a.starts_at);
-                      const end = localMinutes(a.ends_at);
-                      const top = ((start - HOUR_START * 60) / 60) * ROW_H;
+                      const start = localMinutes(a.starts_at), end = localMinutes(a.ends_at);
+                      const top = ((start - hStart * 60) / 60) * ROW_H;
                       const height = Math.max(22, ((end - start) / 60) * ROW_H - 2);
+                      if (start >= hEnd * 60 || end <= hStart * 60) return null;
                       const color = STATUS_VAR[a.status] ?? "var(--text-muted)";
                       return (
-                        <button key={a.id} onClick={() => setSelected(a)} className="absolute left-1 right-1 rounded-lg px-2 py-1 text-left overflow-hidden transition-transform hover:scale-[1.01]"
-                          style={{ top, height, background: "var(--accent-soft)", borderLeft: `3px solid ${color}` }}>
+                        <button key={a.id} onClick={() => setSelected(a)} className="absolute left-1 right-1 rounded-lg px-2 py-1 text-left overflow-hidden transition-transform hover:scale-[1.01]" style={{ top, height, background: "var(--accent-soft)", borderLeft: `3px solid ${color}` }}>
                           <p className="text-[11px] font-semibold leading-tight truncate" style={{ color: "var(--accent-soft-fg)" }}>{fmtTime(a.starts_at)} · {a.service?.name}</p>
                           <p className="text-[10px] leading-tight truncate text-muted">{a.customer_name || a.customer_phone}</p>
                         </button>
                       );
                     })}
-                    {isToday && nowMin >= HOUR_START * 60 && nowMin <= HOUR_END * 60 && (
-                      <div className="absolute left-0 right-0 pointer-events-none z-[5]" style={{ top: ((nowMin - HOUR_START * 60) / 60) * ROW_H }}>
-                        <div style={{ height: 2, background: "var(--danger)" }} />
-                      </div>
-                    )}
+                    {isToday && nowMin >= hStart * 60 && nowMin <= hEnd * 60 && (<div className="absolute left-0 right-0 pointer-events-none z-[5]" style={{ top: ((nowMin - hStart * 60) / 60) * ROW_H }}><div style={{ height: 2, background: "var(--danger)" }} /></div>)}
                   </div>
                 ))}
               </div>
@@ -151,10 +141,7 @@ export default function CalendarPage() {
           <Field label="Note (opzionale)"><Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
         </div>
         {error && <p className="text-xs mt-3" style={{ color: "var(--danger)" }}>{error}</p>}
-        <div className="flex justify-end gap-2 mt-5">
-          <Button variant="ghost" onClick={() => setOpen(false)}>Annulla</Button>
-          <Button onClick={create} disabled={saving}>{saving ? "Salvataggio…" : "Prenota"}</Button>
-        </div>
+        <div className="flex justify-end gap-2 mt-5"><Button variant="ghost" onClick={() => setOpen(false)}>Annulla</Button><Button onClick={create} disabled={saving}>{saving ? "Salvataggio…" : "Prenota"}</Button></div>
       </Modal>
 
       <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.service?.name ?? "Appuntamento"} subtitle={selected ? `${fmtTime(selected.starts_at)} · ${selected.stylist?.name ?? ""}` : ""}>

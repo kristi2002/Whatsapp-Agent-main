@@ -36,3 +36,12 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ ok: true });
 }
+
+/** GET /api/stylists/[id] — stylist with the service ids they can perform. */
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { data: stylist, error } = await supabase.from("stylists").select("*").eq("id", id).single();
+  if (error || !stylist) return Response.json({ error: "Non trovato." }, { status: 404 });
+  const { data: caps } = await supabase.from("stylist_services").select("service_id").eq("stylist_id", id);
+  return Response.json({ ...stylist, service_ids: (caps ?? []).map((c) => c.service_id) });
+}
