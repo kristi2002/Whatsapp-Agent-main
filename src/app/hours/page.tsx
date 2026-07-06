@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import AppShell from "@/components/AppShell";
-import { Card } from "@/components/ui";
+import { Card, Button } from "@/components/ui";
+import { TimeField } from "@/components/pickers";
 import type { BusinessHours } from "@/lib/types";
 
 const DAYS = ["Domenica", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
@@ -12,8 +13,8 @@ const hhmm = (t: string | null) => (t ? t.slice(0, 5) : "");
 export default function HoursPage() {
   const [rows, setRows] = useState<Record<number, BusinessHours>>({});
   const [loading, setLoading] = useState(true);
-  const [savingDay, setSavingDay] = useState<number | null>(null);
-  const [savedDay, setSavedDay] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const load = useCallback(async () => {
     const data: BusinessHours[] = await fetch("/api/hours").then((r) => r.json());
@@ -25,34 +26,37 @@ export default function HoursPage() {
 
   function update(day: number, patch: Partial<BusinessHours>) { setRows((p) => ({ ...p, [day]: { ...p[day], ...patch } })); }
 
-  async function save(day: number) {
-    setSavingDay(day);
-    const r = rows[day];
-    await fetch("/api/hours", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ day_of_week: day, is_closed: r.is_closed, open_time: hhmm(r.open_time) || null, close_time: hhmm(r.close_time) || null, break_start: hhmm(r.break_start) || null, break_end: hhmm(r.break_end) || null }) });
-    setSavingDay(null); setSavedDay(day); setTimeout(() => setSavedDay((d) => (d === day ? null : d)), 1500);
+  async function saveAll() {
+    setSaving(true);
+    for (const d of ORDER) {
+      const r = rows[d];
+      await fetch("/api/hours", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ day_of_week: d, is_closed: r.is_closed, open_time: hhmm(r.open_time) || null, close_time: hhmm(r.close_time) || null, break_start: hhmm(r.break_start) || null, break_end: hhmm(r.break_end) || null }) });
+    }
+    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 1800);
   }
 
-  const tinp = { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "5px 9px", fontSize: 13, color: "var(--text)", outline: "none" } as const;
-
   return (
-    <AppShell title="Orari di apertura" subtitle="Gli orari determinano gli slot disponibili proposti in chat.">
+    <AppShell title="Orari di apertura" subtitle="Gli orari determinano gli slot proposti in chat." actions={<Button size="sm" onClick={saveAll} disabled={saving}>{saving ? "Salvataggio…" : saved ? "✓ Salvato" : "Salva orari"}</Button>}>
       {loading ? <p className="text-sm text-muted">Caricamento…</p> : (
-        <Card className="overflow-hidden">
+        <Card className="divide-y" style={{ borderColor: "var(--border)" }}>
           {ORDER.map((day) => {
             const r = rows[day];
+            const open = !r.is_closed;
             return (
-              <div key={day} className="flex flex-wrap items-center gap-4 px-5 py-3.5 bd-b last:border-b-0">
-                <span className="text-sm w-24 font-medium" style={{ color: "var(--text)" }}>{DAYS[day]}</span>
-                <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={r.is_closed} onChange={(e) => update(day, { is_closed: e.target.checked })} style={{ accentColor: "var(--accent)" }} /> Chiuso</label>
-                {!r.is_closed && (
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                    <span>Apertura</span><input type="time" value={hhmm(r.open_time)} onChange={(e) => update(day, { open_time: e.target.value })} style={tinp} />
-                    <span>Chiusura</span><input type="time" value={hhmm(r.close_time)} onChange={(e) => update(day, { close_time: e.target.value })} style={tinp} />
-                    <span className="ml-2">Pausa</span><input type="time" value={hhmm(r.break_start)} onChange={(e) => update(day, { break_start: e.target.value })} style={tinp} />
-                    <span>–</span><input type="time" value={hhmm(r.break_end)} onChange={(e) => update(day, { break_end: e.target.value })} style={tinp} />
+              <div key={day} className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center gap-3" style={{ borderTop: "1px solid var(--border)" }}>
+                <div className="flex items-center gap-3 sm:w-44 shrink-0">
+                  <span className="text-sm font-medium w-24" style={{ color: "var(--text)" }}>{DAYS[day]}</span>
+                  <button onClick={() => update(day, { is_closed: open })} className="inline-flex items-center gap-2 h-7 px-2.5 rounded-full text-xs font-medium transition-colors" style={open ? { background: "var(--success-soft)", color: "var(--success)" } : { background: "var(--surface-2)", color: "var(--text-muted)" }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: open ? "var(--success)" : "var(--text-faint)" }} />{open ? "Aperto" : "Chiuso"}
+                  </button>
+                </div>
+                {open ? (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">
+                    <div className="flex items-center gap-2"><span className="w-16 sm:w-auto">Apertura</span><div className="w-28"><TimeField value={hhmm(r.open_time)} onChange={(v) => update(day, { open_time: v })} /></div></div>
+                    <div className="flex items-center gap-2"><span>Chiusura</span><div className="w-28"><TimeField value={hhmm(r.close_time)} onChange={(v) => update(day, { close_time: v })} /></div></div>
+                    <div className="flex items-center gap-2 sm:ml-2"><span>Pausa</span><div className="w-28"><TimeField value={hhmm(r.break_start)} onChange={(v) => update(day, { break_start: v })} /></div><span>–</span><div className="w-28"><TimeField value={hhmm(r.break_end)} onChange={(v) => update(day, { break_end: v })} /></div></div>
                   </div>
-                )}
-                <button onClick={() => save(day)} disabled={savingDay === day} className="ml-auto h-8 px-3 rounded-lg text-xs font-medium hover-surface disabled:opacity-40" style={{ border: "1px solid var(--border)", color: savedDay === day ? "var(--success)" : "var(--text-muted)" }}>{savingDay === day ? "…" : savedDay === day ? "✓ Salvato" : "Salva"}</button>
+                ) : <span className="text-sm text-faint">Chiuso tutto il giorno</span>}
               </div>
             );
           })}

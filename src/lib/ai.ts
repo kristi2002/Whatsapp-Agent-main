@@ -27,7 +27,7 @@ export async function getAIResponse(
   ctx: ToolContext
 ): Promise<string> {
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: buildSalonSystemPrompt(ctx.now) },
+    { role: "system", content: buildSalonSystemPrompt(ctx.now, ctx.customerName) },
     ...history,
   ];
 

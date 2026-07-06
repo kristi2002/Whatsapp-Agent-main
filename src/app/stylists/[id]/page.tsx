@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input } from "@/components/ui";
 import type { AppointmentWithRelations, ServiceRow } from "@/lib/gestionale-types";
 import type { BusinessHours } from "@/lib/types";
+import { DateField, TimeField } from "@/components/pickers";
 
 const TZ = "Europe/Rome";
 const todayLocal = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
@@ -90,7 +91,6 @@ export default function StaffDetailPage() {
   async function delOff(oid: string) { await fetch(`/api/timeoff/${oid}`, { method: "DELETE" }); load(); }
 
   const serviceNames = (stylist?.service_ids ?? []).map((sid) => services.find((s) => s.id === sid)?.name).filter(Boolean) as string[];
-  const tinp = { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "4px 8px", fontSize: 12, color: "var(--text)", outline: "none" } as const;
 
   return (
     <AppShell title="Staff" subtitle={stylist?.name} actions={stylist && <><Button size="sm" variant="secondary" onClick={openEdit}><Pencil size={14} /> <span className="hidden sm:inline">Modifica</span></Button><Button size="sm" variant="danger" onClick={remove}><Trash2 size={14} /></Button></>}>
@@ -112,7 +112,7 @@ export default function StaffDetailPage() {
                 <h2 className="text-sm font-semibold mr-auto" style={{ color: "var(--text)" }}>Appuntamenti</h2>
                 <button onClick={() => setDate(shiftDay(date, -1))} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover-surface" style={{ border: "1px solid var(--border)" }}><ChevronLeft size={15} /></button>
                 <button onClick={() => setDate(shiftDay(date, 1))} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover-surface" style={{ border: "1px solid var(--border)" }}><ChevronRight size={15} /></button>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 px-2 rounded-lg text-sm" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+                <div className="w-40"><DateField value={date} onChange={setDate} /></div>
               </div>
               <p className="text-xs text-muted mb-3 capitalize">{prettyDate(date)}</p>
               {appts.length === 0 ? <p className="text-sm text-faint py-6 text-center">Nessun appuntamento in questa data.</p> : (
@@ -135,9 +135,9 @@ export default function StaffDetailPage() {
                         <span className="text-xs w-20" style={{ color: "var(--text)" }}>{DAYS[d]}</span>
                         <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={!hours[d].is_working} onChange={(e) => updHours(d, { is_working: !e.target.checked })} style={{ accentColor: "var(--accent)" }} />Off</label>
                         {hours[d].is_working && <>
-                          <input type="time" value={hhmm(hours[d].open_time)} onChange={(e) => updHours(d, { open_time: e.target.value })} style={tinp} />
+                          <div className="w-24"><TimeField value={hhmm(hours[d].open_time)} onChange={(v) => updHours(d, { open_time: v })} /></div>
                           <span className="text-faint text-xs">–</span>
-                          <input type="time" value={hhmm(hours[d].close_time)} onChange={(e) => updHours(d, { close_time: e.target.value })} style={tinp} />
+                          <div className="w-24"><TimeField value={hhmm(hours[d].close_time)} onChange={(v) => updHours(d, { close_time: v })} /></div>
                         </>}
                       </div>
                     ))}

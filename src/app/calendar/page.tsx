@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Plus, FlaskConical } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Button, Modal, Field, Input, Select, Badge } from "@/components/ui";
 import { Filters, FilterField } from "@/components/data-ui";
+import { DateField, TimeField } from "@/components/pickers";
 import type { AppointmentWithRelations, ServiceRow } from "@/lib/gestionale-types";
 
 const TZ = "Europe/Rome";
@@ -97,7 +98,7 @@ export default function CalendarPage() {
         <button onClick={() => setDate(shiftDay(date, -1))} className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover-surface" style={{ border: "1px solid var(--border)" }}><ChevronLeft size={17} /></button>
         <button onClick={() => setDate(shiftDay(date, 1))} className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover-surface" style={{ border: "1px solid var(--border)" }}><ChevronRight size={17} /></button>
         <button onClick={() => setDate(todayLocal())} className="h-9 px-3 rounded-lg text-xs font-medium text-muted hover-surface" style={{ border: "1px solid var(--border)" }}>Oggi</button>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 px-2 rounded-lg text-sm" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }} />
+        <div className="w-44"><DateField value={date} onChange={setDate} /></div>
         <span className="text-sm text-muted ml-1 capitalize hidden md:block">{prettyDate(date)}</span>
       </div>
 
@@ -151,7 +152,7 @@ export default function CalendarPage() {
           <Field label="Servizio"><Select value={form.service_id} onChange={(e) => setForm({ ...form, service_id: e.target.value })}><option value="">Seleziona…</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.duration_min}′)</option>)}</Select></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Parrucchiere"><Select value={form.stylist_id} onChange={(e) => setForm({ ...form, stylist_id: e.target.value })}><option value="">Seleziona…</option>{stylists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
-            <Field label="Ora"><Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></Field>
+            <Field label="Ora"><TimeField value={form.time} onChange={(v) => setForm({ ...form, time: v })} /></Field>
           </div>
           <Field label="Nome cliente"><Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} /></Field>
           <Field label="Telefono"><Input value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} placeholder="es. 393801234567" /></Field>
