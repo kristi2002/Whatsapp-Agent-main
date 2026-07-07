@@ -277,6 +277,24 @@ export interface BookResult {
   ok: boolean;
   message: string;
   appointmentId?: string;
+  /** When a requested slot is rejected: the closest free times to suggest instead. */
+  alternatives?: Array<{ iso: string; time: string; stylists: string[] }>;
+}
+
+/** Pick the `max` free slots closest in time to `target`, returned chronologically. */
+function nearestSlots(
+  slots: Array<{ iso: string; time: string; stylists: string[] }>,
+  target: Date,
+  max: number
+): Array<{ iso: string; time: string; stylists: string[] }> {
+  return [...slots]
+    .sort(
+      (a, b) =>
+        Math.abs(new Date(a.iso).getTime() - target.getTime()) -
+        Math.abs(new Date(b.iso).getTime() - target.getTime())
+    )
+    .slice(0, max)
+    .sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime());
 }
 
 export async function bookAppointment(params: {
@@ -320,9 +338,26 @@ export async function bookAppointment(params: {
   // genuinely-free time is never wrongly rejected just because it was not shown.
   const match = avail.allSlots?.find((o) => o.iso === start.toISOString());
   if (!match) {
+    const free = avail.allSlots ?? [];
+    if (free.length === 0) {
+      return {
+        ok: false,
+        alternatives: [],
+        message:
+          avail.message ||
+          "Quell'orario non è disponibile e non ci sono altri orari liberi in quella data. Vuoi provare un altro giorno?",
+      };
+    }
+    const nearest = nearestSlots(free, start, BOOKING.maxSlotsReturned);
+    const list = nearest
+      .map((o) => `• ${o.time}${o.stylists.length ? ` (con ${o.stylists.join(" o ")})` : ""}`)
+      .join("\n");
     return {
       ok: false,
-      message: "Quell'orario non è più disponibile. " + (avail.message || ""),
+      alternatives: nearest,
+      message:
+        `L'orario richiesto non è disponibile per ${service.name}. ` +
+        `Questi sono gli orari liberi più vicini:\n${list}`,
     };
   }
 

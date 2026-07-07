@@ -41,6 +41,48 @@ export async function getAIResponse(
     ...history,
   ];
 
+  // Track the REAL outcome of booking-mutating tools this turn, so we never let
+  // the model send a "prenotazione confermata" that isn't backed by a DB write.
+  let bookingOk = false;       // a book/reschedule actually succeeded
+  let bookingFailed = false;   // a book/reschedule was attempted but failed
+  let lastFailureMsg = "";     // the real failure message to relay instead
+  const logPrefix = `[ai convo=${ctx.conversationId ?? "?"}]`;
+  const track = (o: { name: string; ok: boolean; message: string }) => {
+    if (o.name === "book_appointment" || o.name === "reschedule_appointment") {
+      if (o.ok) bookingOk = true;
+      else { bookingFailed = true; lastFailureMsg = o.message; }
+    }
+    console.log(`${logPrefix} tool result ${o.name} ok=${o.ok}`);
+  };
+
+  // A reply that claims a NEW booking was just made (not a reschedule, which
+  // says "spostato", nor a listing from get_my_appointments).
+  const CONFIRMATION_RE =
+    /prenotazione\s+conferm|ho\s+prenotat|appuntamento[^.!?\n]{0,30}(?:conferm|prenotat)|ti\s+ho\s+(?:prenotat|fissat)|fissat\w*\s+l['’]appuntamento/i;
+
+  /**
+   * Final safety gate: if the model claims a fresh booking but no booking
+   * actually succeeded this turn, don't send the false confirmation — relay the
+   * real failure (or a safe retry prompt) instead. Never blocks a real booking,
+   * because a successful book_appointment sets bookingOk=true.
+   */
+  const finalize = (text: string | null | undefined): string => {
+    const reply = text || "Scusa, non sono riuscito a rispondere. Riprova.";
+    if (!bookingOk && CONFIRMATION_RE.test(reply)) {
+      console.warn(
+        `${logPrefix} BLOCKED a booking confirmation with no successful booking ` +
+          `(bookingFailed=${bookingFailed}). Model said: ${reply.slice(0, 160)}`
+      );
+      return (
+        lastFailureMsg ||
+        "Scusa, non sono riuscito a completare la prenotazione in questo momento. " +
+          "Puoi ripetermi servizio, giorno e orario così ricontrollo la disponibilità? " +
+          "In alternativa puoi chiamare il salone."
+      );
+    }
+    return reply;
+  };
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const completion = await getOpenAI().chat.completions.create({
       model: MODEL,
@@ -54,7 +96,7 @@ export async function getAIResponse(
 
     const toolCalls = choice.tool_calls ?? [];
     if (toolCalls.length === 0) {
-      return choice.content || "Scusa, non sono riuscito a rispondere. Riprova.";
+      return finalize(choice.content);
     }
 
     // Record the assistant turn that requested the tools.
@@ -69,7 +111,8 @@ export async function getAIResponse(
       } catch {
         args = {};
       }
-      const result = await executeTool(call.function.name, args, ctx);
+      console.log(`${logPrefix} tool call ${call.function.name} ${call.function.arguments || "{}"}`);
+      const result = await executeTool(call.function.name, args, ctx, track);
       messages.push({
         role: "tool",
         tool_call_id: call.id,
@@ -79,9 +122,7 @@ export async function getAIResponse(
   }
 
   // Ran out of tool rounds — ask the model for a final text-only answer.
+  console.warn(`${logPrefix} tool rounds (${MAX_TOOL_ROUNDS}) exhausted; forcing a final text answer`);
   const finalMsg = await getOpenAI().chat.completions.create({ model: MODEL, messages });
-  return (
-    finalMsg.choices[0]?.message?.content ||
-    "Scusa, qualcosa è andato storto. Puoi chiamare il salone per assistenza."
-  );
+  return finalize(finalMsg.choices[0]?.message?.content);
 }

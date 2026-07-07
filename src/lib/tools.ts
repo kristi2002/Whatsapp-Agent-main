@@ -131,11 +131,19 @@ export const TOOL_DEFINITIONS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
+/**
+ * Optional callback so the caller (the AI loop) can observe the real outcome of
+ * a booking-mutating tool — used to guard against the model claiming a booking
+ * that did not actually happen. `ok` reflects whether the DB write succeeded.
+ */
+export type ToolOutcome = { name: string; ok: boolean; message: string };
+
 /** Execute a tool call and return a string result for the model. */
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
-  ctx: ToolContext
+  ctx: ToolContext,
+  track?: (outcome: ToolOutcome) => void
 ): Promise<string> {
   try {
     switch (name) {
@@ -171,6 +179,7 @@ export async function executeTool(
           conversationId: ctx.conversationId,
           now: ctx.now,
         });
+        track?.({ name, ok: res.ok, message: res.message });
         return res.message;
       }
       case "get_my_appointments": {
@@ -185,6 +194,7 @@ export async function executeTool(
           customerPhone: ctx.customerPhone,
           now: ctx.now,
         });
+        track?.({ name, ok: res.ok, message: res.message });
         return res.message;
       }
       case "cancel_appointment": {
@@ -193,6 +203,7 @@ export async function executeTool(
           customerPhone: ctx.customerPhone,
           now: ctx.now,
         });
+        track?.({ name, ok: res.ok, message: res.message });
         return res.message;
       }
       default:

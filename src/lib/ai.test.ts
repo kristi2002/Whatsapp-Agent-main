@@ -70,7 +70,7 @@ describe("getAIResponse", () => {
 
     const reply = await getAIResponse([{ role: "user", content: "Che servizi avete?" }], ctx);
 
-    expect(executeToolMock).toHaveBeenCalledWith("list_services", {}, ctx);
+    expect(executeToolMock).toHaveBeenCalledWith("list_services", {}, ctx, expect.any(Function));
     expect(reply).toBe("Ecco i nostri servizi.");
     expect(createMock).toHaveBeenCalledTimes(2);
   });
@@ -100,5 +100,48 @@ describe("getAIResponse", () => {
     expect(createMock).toHaveBeenCalledTimes(6);
     expect(typeof reply).toBe("string");
     expect(reply.length).toBeGreaterThan(0);
+  });
+
+  it("blocks a fake confirmation when book_appointment failed", async () => {
+    createMock
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: null, tool_calls: [
+          { id: "b1", type: "function", function: { name: "book_appointment", arguments: "{}" } },
+        ] } }],
+      })
+      // Model wrongly claims success despite the failed tool result.
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: "Prenotazione confermata! Ci vediamo domani 😊", tool_calls: [] } }],
+      });
+    // executeTool reports a FAILED booking through the track callback.
+    executeToolMock.mockImplementationOnce(async (...a: unknown[]) => {
+      const track = a[3] as (o: { name: string; ok: boolean; message: string }) => void;
+      track?.({ name: "book_appointment", ok: false, message: "Quell'orario non è più disponibile." });
+      return "Quell'orario non è più disponibile.";
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "Prenota le 17:30" }], ctx);
+    // The false "confermata" is replaced with the real failure message.
+    expect(reply).toBe("Quell'orario non è più disponibile.");
+  });
+
+  it("allows the confirmation when book_appointment succeeded", async () => {
+    createMock
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: null, tool_calls: [
+          { id: "b1", type: "function", function: { name: "book_appointment", arguments: "{}" } },
+        ] } }],
+      })
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: "Prenotazione confermata! A domani 😊", tool_calls: [] } }],
+      });
+    executeToolMock.mockImplementationOnce(async (...a: unknown[]) => {
+      const track = a[3] as (o: { name: string; ok: boolean; message: string }) => void;
+      track?.({ name: "book_appointment", ok: true, message: "Prenotazione confermata: Taglio donna." });
+      return "Prenotazione confermata: Taglio donna.";
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "Prenota le 10:00" }], ctx);
+    expect(reply).toBe("Prenotazione confermata! A domani 😊");
   });
 });

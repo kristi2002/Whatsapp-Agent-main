@@ -110,6 +110,38 @@ describe("bookAppointment — validation branches", () => {
   });
 });
 
+describe("bookAppointment — suggests nearest times when the slot is unavailable", () => {
+  it("returns the closest free times (not just a rejection) when the requested slot isn't bookable", async () => {
+    const stylist = { id: "g", name: "Genny", active: true, created_at: "" };
+    const HOURS_OPEN = { day_of_week: 3, is_closed: false, open_time: "09:00", close_time: "19:00", break_start: null, break_end: null };
+    h.state.queue = [
+      { data: [svc()] },    // bookAppointment: listActiveServices
+      { data: [svc()] },    // checkAvailability: listActiveServices
+      { data: [stylist] },  // checkAvailability: listActiveStylists
+      { data: [] },         // checkAvailability: stylist_services caps
+      { data: HOURS_OPEN }, // checkAvailability: business_hours
+      { data: [] },         // appointments
+      { data: [] },         // stylist_hours
+      { data: [] },         // stylist_time_off
+    ];
+    // 08:15 Rome (06:15Z) — before opening, so not a valid slot, though the day has plenty of free times.
+    const res = await bookAppointment({
+      service: "Taglio donna",
+      startIso: "2025-07-16T06:15:00.000Z",
+      customerPhone: "393330000000",
+      now: NOW,
+    });
+    expect(res.ok).toBe(false);
+    expect(res.appointmentId).toBeUndefined();
+    expect(res.alternatives!.length).toBeGreaterThan(0);
+    expect(res.message).toContain("orari liberi più vicini");
+    // Alternatives carry a local HH:MM label and are sorted chronologically.
+    expect(res.alternatives!.every((a) => /^\d{2}:\d{2}$/.test(a.time))).toBe(true);
+    const isoTimes = res.alternatives!.map((a) => new Date(a.iso).getTime());
+    expect(isoTimes).toEqual([...isoTimes].sort((x, y) => x - y));
+  });
+});
+
 describe("read/cancel with no data", () => {
   it("getAppointmentsForPhone reports no upcoming appointments", async () => {
     h.state.queue = [{ data: [] }];
