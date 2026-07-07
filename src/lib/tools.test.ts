@@ -5,6 +5,7 @@ const booking = vi.hoisted(() => ({
   formatServiceList: vi.fn(),
   checkAvailability: vi.fn(),
   bookAppointment: vi.fn(),
+  rescheduleAppointment: vi.fn(),
   getAppointmentsForPhone: vi.fn(),
   cancelAppointment: vi.fn(),
 }));
@@ -25,7 +26,7 @@ beforeEach(() => {
 });
 
 describe("TOOL_DEFINITIONS", () => {
-  it("exposes the five booking tools", () => {
+  it("exposes the six booking tools", () => {
     const names = TOOL_DEFINITIONS.filter((t) => t.type === "function")
       .map((t) => t.function.name)
       .sort();
@@ -35,6 +36,7 @@ describe("TOOL_DEFINITIONS", () => {
       "check_availability",
       "get_my_appointments",
       "list_services",
+      "reschedule_appointment",
     ]);
   });
 });

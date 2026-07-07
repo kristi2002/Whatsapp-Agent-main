@@ -10,6 +10,7 @@ import {
   formatServiceList,
   checkAvailability,
   bookAppointment,
+  rescheduleAppointment,
   getAppointmentsForPhone,
   cancelAppointment,
 } from "@/lib/booking";
@@ -87,6 +88,24 @@ export const TOOL_DEFINITIONS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "reschedule_appointment",
+      description:
+        "Sposta un appuntamento ESISTENTE del cliente a un nuovo orario (e, se richiesto, nuovo parrucchiere o servizio). Usa SEMPRE questo strumento per modifiche/spostamenti: NON usare book_appointment, che creerebbe un doppione. Usa lo startIso ESATTO restituito da check_availability. Se il cliente ha più appuntamenti, usa prima get_my_appointments e passa appointmentId.",
+      parameters: {
+        type: "object",
+        properties: {
+          startIso: { type: "string", description: "L'istante ISO esatto del nuovo orario (campo iso di check_availability)." },
+          appointmentId: { type: "string", description: "Opzionale: id dell'appuntamento da spostare (da get_my_appointments)." },
+          stylist: { type: "string", description: "Opzionale: nuovo parrucchiere, SOLO se il cliente lo chiede." },
+          service: { type: "string", description: "Opzionale: nuovo servizio, se il cliente vuole cambiarlo." },
+        },
+        required: ["startIso"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_my_appointments",
       description: "Elenca gli appuntamenti futuri del cliente che sta scrivendo.",
       parameters: { type: "object", properties: {}, required: [] },
@@ -152,6 +171,17 @@ export async function executeTool(
       }
       case "get_my_appointments": {
         return await getAppointmentsForPhone(ctx.customerPhone, ctx.now);
+      }
+      case "reschedule_appointment": {
+        const res = await rescheduleAppointment({
+          appointmentId: (args.appointmentId as string) ?? undefined,
+          startIso: String(args.startIso ?? ""),
+          stylist: (args.stylist as string) ?? null,
+          service: (args.service as string) ?? null,
+          customerPhone: ctx.customerPhone,
+          now: ctx.now,
+        });
+        return res.message;
       }
       case "cancel_appointment": {
         const res = await cancelAppointment({

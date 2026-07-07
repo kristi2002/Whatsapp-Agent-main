@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import { Card, Badge, Select } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";

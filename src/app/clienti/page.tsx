@@ -31,7 +31,7 @@ export default function ClientiPage() {
     if (onlyPriority && !c.priority) return false;
     if (q && !(`${c.name ?? ""} ${c.phone} ${c.email ?? ""}`.toLowerCase().includes(q.toLowerCase()))) return false;
     return true;
-  }), [clients, q, onlyNotes]);
+  }), [clients, q, onlyNotes, onlyPriority]);
   const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 12);
   const activeFilters = (q ? 1 : 0) + (onlyNotes ? 1 : 0) + (onlyPriority ? 1 : 0);
 

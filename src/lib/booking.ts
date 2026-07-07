@@ -88,6 +88,19 @@ export function formatServiceList(services: Service[]): string {
     .join("\n");
 }
 
+/** Evenly sample up to `max` items from a time-sorted list (keeps first & last). */
+function spreadEven<T>(arr: T[], max: number): T[] {
+  if (arr.length <= max) return arr;
+  const out: T[] = [];
+  const seen = new Set<number>();
+  const step = (arr.length - 1) / (max - 1);
+  for (let i = 0; i < max; i++) {
+    const idx = Math.round(i * step);
+    if (!seen.has(idx)) { seen.add(idx); out.push(arr[idx]); }
+  }
+  return out;
+}
+
 export interface AvailabilityResult {
   ok: boolean;
   message: string;
@@ -212,7 +225,12 @@ export async function checkAvailability(params: {
     stylistHours,
   });
 
-  const grouped = groupSlotsByTime(slots).slice(0, BOOKING.maxSlotsReturned);
+  const groupedAll = groupSlotsByTime(slots);
+  // Prefer round times (:00 / :30); spread the offered slots across the whole
+  // day instead of returning the earliest consecutive ones.
+  const roundOnes = groupedAll.filter((g) => getZonedParts(g.startUtc, TZ).minute % 30 === 0);
+  const pool = roundOnes.length >= Math.min(4, BOOKING.maxSlotsReturned) ? roundOnes : groupedAll;
+  const grouped = spreadEven(pool, BOOKING.maxSlotsReturned);
   const options = grouped.map((g) => ({
     iso: g.startUtc.toISOString(),
     label: formatZoned(g.startUtc, TZ, LOCALE),
@@ -403,4 +421,73 @@ export async function cancelAppointment(params: {
     .eq("id", id);
 
   return { ok: true, message: "Appuntamento annullato. A presto!" };
+}
+
+/**
+ * Move an existing appointment to a new time (and optionally stylist/service),
+ * updating the SAME row instead of creating a new booking. Keeps the original
+ * stylist unless a new one is explicitly requested.
+ */
+export async function rescheduleAppointment(params: {
+  appointmentId?: string;
+  customerPhone: string;
+  startIso: string;
+  stylist?: string | null;
+  service?: string | null;
+  now?: Date;
+}): Promise<{ ok: boolean; message: string; appointmentId?: string }> {
+  const now = params.now ?? new Date();
+
+  // Locate the appointment: by id, or the customer's single upcoming booking.
+  let appt: Appointment | null = null;
+  if (params.appointmentId) {
+    const { data } = await supabase.from("appointments").select("*").eq("id", params.appointmentId).single();
+    appt = (data as Appointment) ?? null;
+    if (!appt || appt.customer_phone !== params.customerPhone) return { ok: false, message: "Appuntamento non trovato." };
+  } else {
+    const { data } = await supabase
+      .from("appointments").select("*")
+      .eq("customer_phone", params.customerPhone).eq("status", "booked")
+      .gte("starts_at", now.toISOString()).order("starts_at");
+    const list = (data as Appointment[]) ?? [];
+    if (list.length === 0) return { ok: false, message: "Non trovo appuntamenti futuri da modificare." };
+    if (list.length > 1) {
+      const services = await listActiveServices();
+      const lines = list.map((a) => `• ${formatZoned(new Date(a.starts_at), TZ, LOCALE)} — ${services.find((s) => s.id === a.service_id)?.name ?? "servizio"} (id: ${a.id})`).join("\n");
+      return { ok: false, message: `Hai più appuntamenti futuri. Quale vuoi spostare?\n${lines}` };
+    }
+    appt = list[0];
+  }
+  if (!appt) return { ok: false, message: "Appuntamento non trovato." };
+  if (appt.status !== "booked") return { ok: false, message: "Quell'appuntamento non è attivo." };
+
+  const start = new Date(params.startIso);
+  if (isNaN(start.getTime())) return { ok: false, message: "Orario non valido." };
+  if (start.getTime() < now.getTime() + BOOKING.minLeadTimeMin * 60_000) {
+    return { ok: false, message: "Quell'orario è troppo vicino o già passato. Scegline un altro." };
+  }
+
+  const services = await listActiveServices();
+  const service = params.service ? matchService(services, params.service) : services.find((s) => s.id === appt!.service_id) ?? null;
+  const durationMin = service?.duration_min ?? Math.round((new Date(appt.ends_at).getTime() - new Date(appt.starts_at).getTime()) / 60_000);
+  const end = new Date(start.getTime() + durationMin * 60_000);
+
+  const stylists = await listActiveStylists();
+  const requested = params.stylist ? matchStylist(stylists, params.stylist) : null;
+
+  const update: Record<string, unknown> = { starts_at: start.toISOString(), ends_at: end.toISOString(), updated_at: now.toISOString() };
+  if (requested) update.stylist_id = requested.id;
+  if (service && params.service) update.service_id = service.id;
+
+  const { data, error } = await supabase.from("appointments").update(update).eq("id", appt.id).select().single();
+  if (error) {
+    if (error.code === "23P01") return { ok: false, message: "Quell'orario è già occupato per il parrucchiere. Scegline un altro." };
+    return { ok: false, message: "Non sono riuscito a spostare l'appuntamento. Riprova." };
+  }
+  const finalStylist = stylists.find((s) => s.id === (data as Appointment).stylist_id);
+  return {
+    ok: true,
+    appointmentId: appt.id,
+    message: `Appuntamento spostato a ${formatZoned(start, TZ, LOCALE)}${finalStylist ? ` con ${finalStylist.name}` : ""}.`,
+  };
 }

@@ -36,5 +36,5 @@ export const BOOKING = {
   /** How many days ahead customers may book. */
   maxAdvanceDays: 60,
   /** Max slots to offer per availability answer (keeps WhatsApp replies short). */
-  maxSlotsReturned: 8,
+  maxSlotsReturned: 6,
 } as const;
