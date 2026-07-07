@@ -434,10 +434,14 @@ export async function cancelAppointment(params: {
     return { ok: false, message: "Quell'appuntamento non è attivo." };
   }
 
-  await supabase
+  const { error: cancelError } = await supabase
     .from("appointments")
     .update({ status: "cancelled", updated_at: new Date().toISOString() })
     .eq("id", id);
+  if (cancelError) {
+    console.error("cancelAppointment update failed:", cancelError);
+    return { ok: false, message: "Non sono riuscito ad annullare l'appuntamento. Riprova o chiama il salone." };
+  }
 
   return { ok: true, message: "Appuntamento annullato. A presto!" };
 }

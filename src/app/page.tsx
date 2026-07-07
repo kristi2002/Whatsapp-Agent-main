@@ -25,12 +25,22 @@ export default function OverviewPage() {
   const [stats, setStats] = useState<OverviewStats & { week?: { label: string; count: number }[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/overview");
-    setStats(await res.json());
-    setLoading(false);
+  const load = useCallback(async (silent = false) => {
+    try {
+      const res = await fetch("/api/overview");
+      setStats(await res.json());
+    } catch { /* keep last-known stats on a transient fetch error */ }
+    if (!silent) setLoading(false);
   }, []);
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ load(); }, [load]);
+  // Silently refresh so today's appointments and KPI counts reflect changes made
+  // elsewhere (e.g. the WhatsApp agent) without a manual reload.
+  useEffect(() => {
+    const t = setInterval(() => load(true), 20_000);
+    const onFocus = () => load(true);
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(t); window.removeEventListener("focus", onFocus); };
+  }, [load]);
 
   const today: AppointmentWithRelations[] = stats?.today ?? [];
   const week = stats?.week ?? [];

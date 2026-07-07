@@ -47,6 +47,10 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
+| `DASHBOARD_PASSWORD` | Shared staff password for the dashboard login |
+| `AUTH_SECRET` | Random string (min 16 chars) for signing session cookies |
+| `WHATSAPP_APP_SECRET` | Meta App Secret; verifies webhook signatures (leave blank only in local dev) |
+| `CRON_SECRET` | Secret guarding `/api/cron/reminders`. **Reminders do not send unless this is set** and a scheduler calls the endpoint with it |
 
 ### 3. Set up the database
 
@@ -136,6 +140,21 @@ Deployed on **Hetzner + Coolify** with self-hosted Supabase. The full,
 copy-pasteable runbook (server, Coolify, Supabase, app, Meta webhook, backups)
 is in [`DEPLOY.md`](./DEPLOY.md). After deploying, point your Meta webhook URL at
 `https://your-domain.com/api/webhook`.
+
+### Appointment reminders
+
+Reminders are sent by `GET /api/cron/reminders?key=CRON_SECRET`, which messages
+booked appointments starting ~20–28h out that haven't been reminded yet. This is
+**not automatic** — you must:
+
+1. Set `CRON_SECRET` in the environment (without it the endpoint returns 401 and
+   nothing is sent).
+2. Schedule a call to the URL above (Coolify scheduled task, system cron, or an
+   uptime pinger), e.g. hourly:
+   `curl -s "https://your-domain.com/api/cron/reminders?key=$CRON_SECRET"`
+
+Note: outside Meta's 24-hour customer-service window, reminders must use an
+**approved message template** rather than plain text.
 
 ---
 

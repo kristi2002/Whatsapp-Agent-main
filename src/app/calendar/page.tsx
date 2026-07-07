@@ -41,13 +41,24 @@ export default function CalendarPage() {
   const [stylistFilter, setStylistFilter] = useState("");
   const router = useRouter();
 
-  const loadAppts = useCallback(async (d: string) => {
-    setLoading(true);
-    const data = await fetch(`/api/appointments?from=${d}&to=${d}`).then((r) => r.json());
-    setAppts(Array.isArray(data) ? data.filter((a: AppointmentWithRelations) => a.status !== "cancelled") : []);
-    setLoading(false);
+  const loadAppts = useCallback(async (d: string, silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const data = await fetch(`/api/appointments?from=${d}&to=${d}`).then((r) => r.json());
+      setAppts(Array.isArray(data) ? data.filter((a: AppointmentWithRelations) => a.status !== "cancelled") : []);
+    } catch { /* keep last-known data on a transient fetch error */ }
+    if (!silent) setLoading(false);
   }, []);
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ loadAppts(date); }, [date, loadAppts]);
+  // Silently re-fetch so appointments created/cancelled elsewhere (e.g. the
+  // WhatsApp agent) appear without a manual refresh. Also refresh when the tab
+  // regains focus so staff see changes the moment they return to the calendar.
+  useEffect(() => {
+    const t = setInterval(() => loadAppts(date, true), 20_000);
+    const onFocus = () => loadAppts(date, true);
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(t); window.removeEventListener("focus", onFocus); };
+  }, [date, loadAppts]);
   useEffect(() => {
     Promise.all([fetch("/api/stylists").then((r) => r.json()), fetch("/api/services").then((r) => r.json())]).then(([st, sv]) => {
       /* eslint-disable-next-line react-hooks/set-state-in-effect */ setStylists((st as Stylist[]).filter((s) => s.active));
