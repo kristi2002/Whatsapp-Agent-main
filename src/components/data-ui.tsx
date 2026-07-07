@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { AnimatePresence, motion } from "motion/react";
 import { SlidersHorizontal, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 /** Collapsible filter panel. `activeCount` shows a badge; `onReset` clears. */
@@ -19,15 +18,16 @@ export function Filters({ activeCount = 0, onReset, children }: { activeCount?: 
           <button onClick={onReset} className="inline-flex items-center gap-1 h-9 px-2.5 rounded-lg text-xs text-muted hover-surface"><X size={13} /> Azzera</button>
         )}
       </div>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
-            <div className="card mt-2 p-4" style={{ boxShadow: "var(--shadow)" }}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{children}</div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Animate to auto height via the grid-rows 0fr↔1fr trick — no JS height
+          measurement, so custom pickers/selects can't be clipped mid-render
+          (which made the panel look like it rendered behind the table). */}
+      <div className="grid transition-all duration-200 ease-out" style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}>
+        <div className="overflow-hidden min-h-0">
+          <div className="card mt-2 p-4" style={{ boxShadow: "var(--shadow)" }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{children}</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
