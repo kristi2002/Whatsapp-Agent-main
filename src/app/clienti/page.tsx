@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Plus, StickyNote } from "lucide-react";
+import { Plus, StickyNote, Star } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Modal, Field, Input } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
 import type { ClientRow } from "@/lib/gestionale-types";
+import { loyaltyTier } from "@/lib/loyalty";
+import { Badge } from "@/components/ui";
 
 const initials = (name: string | null, phone: string) => (name ? name.trim().split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() : phone.slice(-2));
 
@@ -19,17 +21,19 @@ export default function ClientiPage() {
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
   const [onlyNotes, setOnlyNotes] = useState(false);
+  const [onlyPriority, setOnlyPriority] = useState(false);
 
   const load = useCallback(async () => { setClients(await fetch("/api/clients").then((r) => r.json())); setLoading(false); }, []);
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ load(); }, [load]);
 
   const filtered = useMemo(() => clients.filter((c) => {
     if (onlyNotes && !c.notes) return false;
+    if (onlyPriority && !c.priority) return false;
     if (q && !(`${c.name ?? ""} ${c.phone} ${c.email ?? ""}`.toLowerCase().includes(q.toLowerCase()))) return false;
     return true;
   }), [clients, q, onlyNotes]);
   const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 12);
-  const activeFilters = (q ? 1 : 0) + (onlyNotes ? 1 : 0);
+  const activeFilters = (q ? 1 : 0) + (onlyNotes ? 1 : 0) + (onlyPriority ? 1 : 0);
 
   async function create() {
     setSaving(true); setError("");
@@ -41,9 +45,10 @@ export default function ClientiPage() {
 
   return (
     <AppShell title="Clienti" subtitle={`${clients.length} clienti`} actions={<Button size="sm" onClick={() => { setForm({ name: "", phone: "", email: "", notes: "" }); setError(""); setAdding(true); }}><Plus size={15} /> <span className="hidden sm:inline">Aggiungi</span></Button>}>
-      <Filters activeCount={activeFilters} onReset={() => { setQ(""); setOnlyNotes(false); }}>
+      <Filters activeCount={activeFilters} onReset={() => { setQ(""); setOnlyNotes(false); setOnlyPriority(false); }}>
         <FilterField label="Cerca"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome, telefono, email" /></FilterField>
         <label className="flex items-center gap-2 text-sm text-muted self-end"><input type="checkbox" checked={onlyNotes} onChange={(e) => setOnlyNotes(e.target.checked)} style={{ accentColor: "var(--accent)" }} /> Solo con note</label>
+        <label className="flex items-center gap-2 text-sm text-muted self-end"><input type="checkbox" checked={onlyPriority} onChange={(e) => setOnlyPriority(e.target.checked)} style={{ accentColor: "var(--accent)" }} /> Solo prioritari</label>
       </Filters>
 
       {loading ? <p className="text-sm text-muted">Caricamento…</p> : (
@@ -55,10 +60,13 @@ export default function ClientiPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-semibold shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}>{initials(c.name, c.phone)}</div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>{c.name || c.phone}</p>
+                      <p className="text-sm font-medium truncate flex items-center gap-1.5" style={{ color: "var(--text)" }}>{c.priority && <Star size={13} className="shrink-0" style={{ color: "var(--warning)", fill: "var(--warning)" }} />}{c.name || c.phone}</p>
                       <p className="text-xs text-muted truncate">{c.phone}</p>
                     </div>
-                    {c.notes && <StickyNote size={15} className="text-faint shrink-0" />}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <Badge tone={loyaltyTier(c.loyalty_points).tone}>{c.loyalty_points} pt</Badge>
+                      {c.notes && <StickyNote size={13} className="text-faint" />}
+                    </div>
                   </div>
                 </Card>
               </Link>

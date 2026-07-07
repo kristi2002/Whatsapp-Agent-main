@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CalendarDays, Hourglass, MessageSquare, Users, FlaskConical, Sparkles, Scissors, Package, BarChart3, Clock, LogOut } from "lucide-react";
+import { LayoutDashboard, CalendarDays, CalendarClock, Hourglass, MessageSquare, Users, FlaskConical, Award, Sparkles, Scissors, Package, BarChart3, Clock, LogOut } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const NAV = [
   { href: "/", label: "Panoramica", icon: LayoutDashboard },
   { href: "/calendar", label: "Calendario", icon: CalendarDays },
+  { href: "/appuntamenti", label: "Appuntamenti", icon: CalendarClock },
   { href: "/attesa", label: "Lista d\u2019attesa", icon: Hourglass },
   { href: "/chat", label: "Conversazioni", icon: MessageSquare },
   { href: "/clienti", label: "Clienti", icon: Users },
   { href: "/ricettario", label: "Ricettario", icon: FlaskConical },
+  { href: "/fidelity", label: "Fedelt\u00e0", icon: Award },
   { href: "/services", label: "Servizi", icon: Sparkles },
   { href: "/stylists", label: "Staff", icon: Scissors },
   { href: "/magazzino", label: "Magazzino", icon: Package },

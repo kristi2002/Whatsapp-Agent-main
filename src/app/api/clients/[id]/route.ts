@@ -6,13 +6,14 @@ export async function GET(_r: NextRequest, { params }: { params: Promise<{ id: s
   const { id } = await params;
   const { data: client, error } = await supabase.from("clients").select("*").eq("id", id).single();
   if (error || !client) return Response.json({ error: "Non trovato." }, { status: 404 });
-  const [appts, sales, colorCards] = await Promise.all([
+  const [appts, sales, colorCards, loyaltyTx] = await Promise.all([
     supabase.from("appointments").select("*, service:services(name,price_cents), stylist:stylists(name)").eq("customer_phone", client.phone).order("starts_at", { ascending: false }),
     supabase.from("sales").select("*, items:sale_items(*)").eq("client_id", id).order("created_at", { ascending: false }),
     supabase.from("color_sessions").select("*, items:color_session_items(*), stylist:stylists(name)").eq("client_id", id).order("date", { ascending: false }),
+    supabase.from("loyalty_transactions").select("*").eq("client_id", id).order("created_at", { ascending: false }).limit(50),
   ]);
   const totalSpent = (sales.data ?? []).reduce((t, s) => t + (s.total_cents || 0), 0);
-  return Response.json({ client, appointments: appts.data ?? [], sales: sales.data ?? [], colorSessions: colorCards.data ?? [], totalSpent });
+  return Response.json({ client, appointments: appts.data ?? [], sales: sales.data ?? [], colorSessions: colorCards.data ?? [], loyalty: loyaltyTx.data ?? [], totalSpent });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -25,6 +26,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (b.allergies !== undefined) u.allergies = b.allergies?.trim() || null;
   if (b.patch_test_date !== undefined) u.patch_test_date = b.patch_test_date || null;
   if (b.birthdate !== undefined) u.birthdate = b.birthdate || null;
+  if (b.priority !== undefined) u.priority = !!b.priority;
   if (b.patch_test_result !== undefined) u.patch_test_result = b.patch_test_result?.trim() || null;
   if (b.phone !== undefined) { if (!b.phone.trim()) return Response.json({ error: "Telefono vuoto." }, { status: 400 }); u.phone = b.phone.trim(); }
   const { data, error } = await supabase.from("clients").update(u).eq("id", id).select().single();

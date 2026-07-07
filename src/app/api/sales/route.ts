@@ -24,5 +24,17 @@ export async function POST(request: NextRequest) {
       if (p) await supabase.from("products").update({ stock_qty: Math.max(0, p.stock_qty - (Number(it.qty) || 1)) }).eq("id", it.product_id);
     }
   }
+  // Loyalty: award 1 point per euro on the sale total.
+  if (b.client_id) {
+    const pts = Math.floor(total / 100);
+    if (pts > 0) {
+      const { data: cl } = await supabase.from("clients").select("loyalty_points").eq("id", b.client_id).single();
+      if (cl) {
+        await supabase.from("clients").update({ loyalty_points: (cl.loyalty_points || 0) + pts }).eq("id", b.client_id);
+        await supabase.from("loyalty_transactions").insert({ client_id: b.client_id, delta: pts, reason: "acquisto" });
+      }
+    }
+  }
+
   return Response.json(sale);
 }

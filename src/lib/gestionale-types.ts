@@ -46,6 +46,8 @@ export interface ClientRow {
   patch_test_date: string | null;
   patch_test_result: string | null;
   birthdate: string | null;
+  priority: boolean;
+  loyalty_points: number;
   created_at: string;
   updated_at: string;
 }

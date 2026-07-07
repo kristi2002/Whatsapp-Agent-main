@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { Plus, Pencil, Package, AlertTriangle, ArrowDownUp, ArrowUp, ArrowDown } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
@@ -78,10 +79,10 @@ export default function MagazzinoPage() {
               const out = p.stock_qty <= 0, low = !out && p.stock_qty <= p.low_stock_threshold;
               return (
                 <Card key={p.id} className={`p-4 ${p.active ? "" : "opacity-40"}`}>
-                  <div className="flex items-start gap-3">
+                  <Link href={`/magazzino/${p.id}`} className="flex items-start gap-3 group">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}><Package size={18} /></div>
-                    <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>{p.name}</p><p className="text-xs text-muted truncate">{[p.brand, p.category].filter(Boolean).join(" · ") || "—"}</p></div>
-                  </div>
+                    <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate group-hover:text-accent transition-colors" style={{ color: "var(--text)" }}>{p.name}</p><p className="text-xs text-muted truncate">{[p.brand, p.category].filter(Boolean).join(" · ") || "—"}</p></div>
+                  </Link>
                   <div className="flex items-center justify-between mt-3">
                     <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>{euro(p.price_cents)}</span>
                     {out ? <Badge tone="danger"><AlertTriangle size={11} className="inline mr-1" />Esaurito</Badge> : low ? <Badge tone="warning">{p.stock_qty} rimasti</Badge> : <Badge tone="neutral">{p.stock_qty} in stock</Badge>}

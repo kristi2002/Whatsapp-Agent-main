@@ -1,6 +1,15 @@
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+export async function GET(_r: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { data: product, error } = await supabase.from("products").select("*").eq("id", id).single();
+  if (error || !product) return Response.json({ error: "Non trovato." }, { status: 404 });
+  const { data: sp } = await supabase.from("service_products").select("qty, service:services(name)").eq("product_id", id);
+  const consumedBy = (sp ?? []).map((r) => ({ qty: r.qty, name: (r.service as unknown as { name?: string } | null)?.name ?? "—" }));
+  return Response.json({ ...product, consumedBy });
+}
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const b = await request.json();

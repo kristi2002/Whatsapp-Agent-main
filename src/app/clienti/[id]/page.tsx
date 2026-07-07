@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Trash2, Plus, Receipt, X, Printer, FlaskConical, ImagePlus, AlertCircle, Copy, Droplet } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, Plus, Minus, Receipt, X, Printer, FlaskConical, ImagePlus, AlertCircle, Copy, Droplet, Star, Award } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
 import { SALON } from "@/lib/salon-config";
+import { loyaltyTier } from "@/lib/loyalty";
 import type { ClientRow, Sale, SaleItem, ColorSession, ColorSessionItem, ProductRow, ServiceRow, AppointmentWithRelations } from "@/lib/gestionale-types";
 
 const TZ = "Europe/Rome";
@@ -63,10 +64,13 @@ export default function ClientDetailPage() {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [detail, setDetail] = useState<Sess | null>(null);
   const [err, setErr] = useState("");
+  const [loyalty, setLoyalty] = useState<{ id: string; delta: number; reason: string | null; created_at: string }[]>([]);
+  const [adjOpen, setAdjOpen] = useState(false);
+  const [adj, setAdj] = useState({ delta: "", reason: "" });
 
   const load = useCallback(async () => {
     const d = await fetch(`/api/clients/${id}`).then((r) => r.json());
-    setClient(d.client); setAppts(d.appointments ?? []); setSales(d.sales ?? []); setSessions(d.colorSessions ?? []); setTotalSpent(d.totalSpent ?? 0); setNotesDraft(d.client?.notes ?? ""); setLoading(false);
+    setClient(d.client); setAppts(d.appointments ?? []); setSales(d.sales ?? []); setSessions(d.colorSessions ?? []); setTotalSpent(d.totalSpent ?? 0); setLoyalty(d.loyalty ?? []); setNotesDraft(d.client?.notes ?? ""); setLoading(false);
   }, [id]);
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ load(); }, [load]);
   useEffect(() => {
@@ -88,6 +92,8 @@ export default function ClientDetailPage() {
   function openEdit() { if (!client) return; setEform({ name: client.name ?? "", phone: client.phone, email: client.email ?? "", allergies: client.allergies ?? "", patch_test_date: client.patch_test_date ?? "", patch_test_result: client.patch_test_result ?? "", birthdate: client.birthdate ?? "" }); setErr(""); setEdit(true); }
   async function saveEdit() { const res = await fetch(`/api/clients/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(eform) }); if (!res.ok) { setErr((await res.json()).error || "Errore."); return; } setEdit(false); load(); }
   async function remove() { if (!confirm("Eliminare definitivamente questo cliente?")) return; await fetch(`/api/clients/${id}`, { method: "DELETE" }); router.push("/clienti"); }
+  async function togglePriority() { if (!client) return; await fetch(`/api/clients/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: !client.priority }) }); load(); }
+  async function adjustPoints() { const delta = Number(adj.delta); if (!delta) return; await fetch(`/api/clients/${id}/loyalty`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delta, reason: adj.reason }) }); setAdjOpen(false); setAdj({ delta: "", reason: "" }); load(); }
 
   function addLine() { if (!pick) return; const [kind, itemId] = pick.split(":"); if (kind === "product") { const p = products.find((x) => x.id === itemId); if (p) setLines((l) => [...l, { key: nk(), kind: "product", product_id: p.id, description: p.name, qty: 1, unit_price_cents: p.price_cents ?? 0 }]); } else { const s = services.find((x) => x.id === itemId); if (s) setLines((l) => [...l, { key: nk(), kind: "service", service_id: s.id, description: s.name, qty: 1, unit_price_cents: s.price_cents ?? 0 }]); } setPick(""); }
   const saleTotal = lines.reduce((s, l) => s + l.unit_price_cents * l.qty, 0);
@@ -109,7 +115,7 @@ export default function ClientDetailPage() {
   async function deleteSess(sid: string) { if (!confirm("Eliminare questa scheda colore?")) return; await fetch(`/api/color-sessions/${sid}`, { method: "DELETE" }); setDetail(null); load(); }
 
   return (
-    <AppShell title="Clienti" subtitle={client?.name || client?.phone} actions={client && <><Button size="sm" variant="secondary" onClick={openEdit}><Pencil size={14} /> <span className="hidden sm:inline">Modifica</span></Button><Button size="sm" variant="danger" onClick={remove}><Trash2 size={14} /></Button></>}>
+    <AppShell title="Clienti" subtitle={client?.name || client?.phone} actions={client && <><button onClick={togglePriority} title="Cliente prioritario" className="w-9 h-9 rounded-lg flex items-center justify-center hover-surface" style={{ border: "1px solid var(--border)" }}><Star size={16} style={client.priority ? { color: "var(--warning)", fill: "var(--warning)" } : { color: "var(--text-muted)" }} /></button><Button size="sm" variant="secondary" onClick={openEdit}><Pencil size={14} /> <span className="hidden sm:inline">Modifica</span></Button><Button size="sm" variant="danger" onClick={remove}><Trash2 size={14} /></Button></>}>
       <Link href="/clienti" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-accent mb-4"><ArrowLeft size={15} /> Clienti</Link>
       {loading || !client ? <p className="text-sm text-muted">Caricamento…</p> : (
         <div className="grid lg:grid-cols-3 gap-4">
@@ -117,7 +123,7 @@ export default function ClientDetailPage() {
             <Card className="p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-semibold shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}>{(client.name || client.phone).slice(0, 2).toUpperCase()}</div>
-                <div className="min-w-0"><p className="text-base font-semibold truncate" style={{ color: "var(--text)" }}>{client.name || "Senza nome"}</p><p className="text-sm text-muted">{client.phone}</p></div>
+                <div className="min-w-0"><p className="text-base font-semibold truncate flex items-center gap-1.5" style={{ color: "var(--text)" }}>{client.priority && <Star size={14} className="shrink-0" style={{ color: "var(--warning)", fill: "var(--warning)" }} />}{client.name || "Senza nome"}</p><p className="text-sm text-muted">{client.phone}</p></div>
               </div>
               {client.email && <p className="text-sm text-muted mb-1">{client.email}</p>}
               <div className="flex items-center justify-between py-2 mt-2" style={{ borderTop: "1px solid var(--border)" }}><span className="text-xs text-muted">Spesa totale</span><span className="text-sm font-semibold" style={{ color: "var(--text)" }}>{euro(totalSpent)}</span></div>
@@ -136,6 +142,22 @@ export default function ClientDetailPage() {
               <p className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>Note e preferenze</p>
               <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={5} placeholder="Preferenze, carattere, richieste…" className="w-full rounded-lg text-sm p-3 outline-none resize-none" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }} />
               <div className="flex justify-end mt-2"><Button size="sm" variant="secondary" onClick={saveNotes}>{notesSaved ? "✓ Salvato" : "Salva note"}</Button></div>
+            </Card>
+
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--text)" }}><Award size={15} className="text-accent" /> Fedeltà</h2>
+                <Badge tone={loyaltyTier(client.loyalty_points).tone}>{loyaltyTier(client.loyalty_points).name}</Badge>
+              </div>
+              <div className="flex items-end justify-between">
+                <div><p className="text-3xl font-semibold" style={{ color: "var(--text)" }}>{client.loyalty_points}</p><p className="text-xs text-muted">punti</p></div>
+                <Button size="sm" variant="secondary" onClick={() => { setAdj({ delta: "", reason: "" }); setAdjOpen(true); }}>Gestisci punti</Button>
+              </div>
+              {loyalty.length > 0 && (
+                <div className="mt-3 pt-3 space-y-1 max-h-32 overflow-y-auto thin-scroll" style={{ borderTop: "1px solid var(--border)" }}>
+                  {loyalty.map((l) => (<div key={l.id} className="flex items-center justify-between text-xs"><span className="text-muted">{l.reason || (l.delta > 0 ? "aggiunta" : "riscatto")}</span><span className="font-medium tabular-nums" style={{ color: l.delta > 0 ? "var(--success)" : "var(--danger)" }}>{l.delta > 0 ? "+" : ""}{l.delta}</span></div>))}
+                </div>
+              )}
             </Card>
           </div>
 
@@ -274,6 +296,18 @@ export default function ClientDetailPage() {
 
       <Modal open={!!receipt} onClose={() => setReceipt(null)} title="Ricevuta" subtitle={receipt ? fmtDateTime(receipt.created_at) : ""}>
         {receipt && (<div><div className="rounded-lg p-4" style={{ background: "var(--surface-2)" }}><p className="text-center text-sm font-semibold" style={{ color: "var(--text)" }}>{SALON.name}</p><p className="text-center text-xs text-muted mb-3">{SALON.address}</p><div className="space-y-1">{(receipt.items ?? []).map((it: SaleItem) => (<div key={it.id} className="flex justify-between text-sm"><span style={{ color: "var(--text)" }}>{it.qty}× {it.description}</span><span className="tabular-nums" style={{ color: "var(--text)" }}>{euro(it.unit_price_cents * it.qty)}</span></div>))}</div><div className="flex justify-between mt-3 pt-3 text-sm font-semibold" style={{ borderTop: "1px solid var(--border)", color: "var(--text)" }}><span>Totale</span><span className="tabular-nums">{euro(receipt.total_cents)}</span></div><p className="text-center text-[10px] text-faint mt-3">Documento non fiscale</p></div><div className="flex justify-end gap-2 mt-4"><Button variant="secondary" size="sm" onClick={() => window.print()}><Printer size={14} /> Stampa</Button></div></div>)}
+      </Modal>
+
+      <Modal open={adjOpen} onClose={() => setAdjOpen(false)} title="Gestisci punti fedeltà">
+        <div className="space-y-3">
+          <Field label="Variazione punti (+ aggiungi / - riscatta)"><Input type="number" value={adj.delta} onChange={(e) => setAdj({ ...adj, delta: e.target.value })} placeholder="es. 50 oppure -100" /></Field>
+          <Field label="Motivo"><Input value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })} placeholder="es. premio, correzione" /></Field>
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setAdj({ ...adj, delta: String(Math.abs(Number(adj.delta) || 0)) })}><Plus size={13} /> Aggiungi</Button>
+            <Button variant="secondary" className="flex-1" onClick={() => setAdj({ ...adj, delta: String(-Math.abs(Number(adj.delta) || 0)) })}><Minus size={13} /> Riscatta</Button>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5"><Button variant="ghost" onClick={() => setAdjOpen(false)}>Annulla</Button><Button onClick={adjustPoints}>Conferma</Button></div>
       </Modal>
 
       <datalist id="dl-brands">{options.brands.map((b) => <option key={b} value={b} />)}</datalist>
