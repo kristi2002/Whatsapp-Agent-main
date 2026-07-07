@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { buildSalonSystemPrompt } from "@/lib/system-prompt";
+import { formatBusinessHours } from "@/lib/booking";
 import { TOOL_DEFINITIONS, executeTool, type ToolContext } from "@/lib/tools";
 
 // Lazily construct the client so importing this module (e.g. during
@@ -26,8 +27,17 @@ export async function getAIResponse(
   history: { role: "user" | "assistant"; content: string }[],
   ctx: ToolContext
 ): Promise<string> {
+  // Read the salon's real opening hours so the assistant never offers a closed
+  // day or an out-of-hours slot. Non-fatal: fall back to tool-only guidance.
+  let hoursLabel: string | null = null;
+  try {
+    hoursLabel = await formatBusinessHours();
+  } catch (err) {
+    console.error("formatBusinessHours failed:", err);
+  }
+
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: buildSalonSystemPrompt(ctx.now, ctx.customerName) },
+    { role: "system", content: buildSalonSystemPrompt(ctx.now, ctx.customerName, hoursLabel) },
     ...history,
   ];
 

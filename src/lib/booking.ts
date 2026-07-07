@@ -15,6 +15,7 @@ import {
   zonedWallTimeToUtc,
   getZonedParts,
   formatZoned,
+  formatTime,
 } from "@/lib/timezone";
 import type { Service, Stylist, BusinessHours, Appointment } from "@/lib/types";
 
@@ -109,8 +110,8 @@ export interface AvailabilityResult {
   durationMin?: number;
   /** Sampled subset shown to the customer (spread across the day). */
   options?: Array<{ iso: string; label: string; stylists: string[] }>;
-  /** ALL genuinely-free slots (unsampled) — used for booking validation. */
-  allSlots?: Array<{ iso: string; stylists: string[] }>;
+  /** ALL genuinely-free slots (unsampled) — used for booking validation and exact-time checks. */
+  allSlots?: Array<{ iso: string; time: string; stylists: string[] }>;
 }
 
 export async function checkAvailability(params: {
@@ -180,10 +181,12 @@ export async function checkAvailability(params: {
     .from("business_hours")
     .select("*")
     .eq("day_of_week", weekdayOf(params.date))
-    .single();
+    .maybeSingle();
   const hours = hoursRow as BusinessHours | null;
 
-  if (!hours || hours.is_closed) {
+  // Closed if: no row for that weekday, the day is flagged closed, or it is
+  // marked open but has no opening/closing time to work within.
+  if (!hours || hours.is_closed || !hours.open_time || !hours.close_time) {
     return {
       ok: true,
       serviceId: service.id,
@@ -246,6 +249,7 @@ export async function checkAvailability(params: {
   // Full free-slot set (every valid start time), for booking validation.
   const allSlots = groupedAll.map((g) => ({
     iso: g.startUtc.toISOString(),
+    time: formatTime(g.startUtc, TZ, LOCALE),
     stylists: g.stylists.map((s) => s.name),
   }));
 
@@ -534,4 +538,39 @@ export async function recentOnlineBookingCount(phone: string, now: Date = new Da
     .eq("source", "online")
     .gte("created_at", since);
   return count ?? 0;
+}
+
+/** Italian weekday names, indexed 0 = domenica … 6 = sabato. */
+const IT_DAYS = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
+
+/**
+ * Human-readable Italian opening-hours summary, read live from `business_hours`.
+ * Injected into the AI system prompt so the assistant knows which days/times the
+ * salon is open and never offers a closed day or an out-of-hours slot in
+ * conversation (the booking tools remain the hard guard). Returns "" if the
+ * table is empty so callers can fall back gracefully.
+ */
+export async function formatBusinessHours(): Promise<string> {
+  const { data } = await supabase
+    .from("business_hours")
+    .select("day_of_week, is_closed, open_time, close_time")
+    .order("day_of_week");
+  const rows = (data ?? []) as BusinessHours[];
+  if (!rows.length) return "";
+
+  const openLines: string[] = [];
+  const closed: string[] = [];
+  for (let d = 0; d < 7; d++) {
+    const row = rows.find((r) => r.day_of_week === d);
+    if (!row || row.is_closed || !row.open_time || !row.close_time) {
+      closed.push(IT_DAYS[d]);
+    } else {
+      openLines.push(`${IT_DAYS[d]}: ${row.open_time.slice(0, 5)}–${row.close_time.slice(0, 5)}`);
+    }
+  }
+
+  const parts: string[] = [];
+  if (openLines.length) parts.push("Aperto:\n- " + openLines.join("\n- "));
+  if (closed.length) parts.push(`Chiuso: ${closed.join(", ")}.`);
+  return parts.join("\n");
 }

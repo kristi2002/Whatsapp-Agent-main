@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Calendar as CalIcon, Clock, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Calendar as CalIcon, Clock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X } from "lucide-react";
 
 const TZ = "Europe/Rome";
 const WD = ["lu", "ma", "me", "gi", "ve", "sa", "do"];
@@ -40,17 +40,18 @@ export function DateField({ value, onChange, min, max, placeholder = "Seleziona 
   const cells: (number | null)[] = [...Array(startWd).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   const label = value ? new Date(value + "T00:00:00").toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" }) : placeholder;
   function shiftMonth(d: number) { let m = view.m + d, y = view.y; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; } setView({ y, m }); }
+  function shiftYear(d: number) { setView({ y: view.y + d, m: view.m }); }
   function pick(day: number) { const s = `${view.y}-${pad(view.m)}-${pad(day)}`; if ((min && s < min) || (max && s > max)) return; onChange(s); setOpen(false); }
 
   return (
     <Popover open={open} setOpen={setOpen} trigger={<div className={triggerCls} style={triggerStyle}><CalIcon size={15} className="text-muted shrink-0" /><span className={value ? "" : "text-faint"}>{label}</span></div>}>
       <div className="w-64">
-        <div className="flex items-center justify-between px-1 mb-2">
-          <span className="text-sm font-medium capitalize" style={{ color: "var(--text)" }}>{MONTHS[view.m - 1]} {view.y}</span>
-          <div className="flex gap-1">
-            <button onClick={() => shiftMonth(-1)} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover-surface"><ChevronLeft size={15} /></button>
-            <button onClick={() => shiftMonth(1)} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover-surface"><ChevronRight size={15} /></button>
-          </div>
+        <div className="flex items-center gap-1 px-1 mb-2">
+          <button onClick={() => shiftYear(-1)} title="Anno precedente" className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover-surface"><ChevronsLeft size={15} /></button>
+          <button onClick={() => shiftMonth(-1)} title="Mese precedente" className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover-surface"><ChevronLeft size={15} /></button>
+          <span className="flex-1 text-center text-sm font-medium capitalize" style={{ color: "var(--text)" }}>{MONTHS[view.m - 1]} {view.y}</span>
+          <button onClick={() => shiftMonth(1)} title="Mese successivo" className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover-surface"><ChevronRight size={15} /></button>
+          <button onClick={() => shiftYear(1)} title="Anno successivo" className="w-7 h-7 rounded-lg flex items-center justify-center text-muted hover-surface"><ChevronsRight size={15} /></button>
         </div>
         <div className="grid grid-cols-7 gap-0.5 mb-1">{WD.map((w) => <div key={w} className="text-[10px] text-center text-faint uppercase">{w}</div>)}</div>
         <div className="grid grid-cols-7 gap-0.5">

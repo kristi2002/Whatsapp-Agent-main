@@ -45,7 +45,8 @@ export default function StaffDetailPage() {
   // ferie
   const [timeOff, setTimeOff] = useState<TimeOff[]>([]);
   const [offOpen, setOffOpen] = useState(false);
-  const [off, setOff] = useState({ starts_at: "", ends_at: "", reason: "" });
+  const emptyOff = { startDate: "", startTime: "09:00", endDate: "", endTime: "18:00", reason: "" };
+  const [off, setOff] = useState(emptyOff);
   const [offErr, setOffErr] = useState("");
 
   const load = useCallback(async () => {
@@ -83,10 +84,12 @@ export default function StaffDetailPage() {
 
   async function addOff() {
     setOffErr("");
-    if (!off.starts_at || !off.ends_at) { setOffErr("Indica inizio e fine."); return; }
-    const res = await fetch(`/api/stylists/${id}/timeoff`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starts_at: new Date(off.starts_at).toISOString(), ends_at: new Date(off.ends_at).toISOString(), reason: off.reason }) });
+    if (!off.startDate || !off.endDate) { setOffErr("Indica giorno di inizio e fine."); return; }
+    const start = new Date(`${off.startDate}T${off.startTime || "00:00"}`);
+    const end = new Date(`${off.endDate}T${off.endTime || "23:59"}`);
+    const res = await fetch(`/api/stylists/${id}/timeoff`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starts_at: start.toISOString(), ends_at: end.toISOString(), reason: off.reason }) });
     if (!res.ok) { setOffErr((await res.json()).error || "Errore."); return; }
-    setOffOpen(false); setOff({ starts_at: "", ends_at: "", reason: "" }); load();
+    setOffOpen(false); setOff(emptyOff); load();
   }
   async function delOff(oid: string) { await fetch(`/api/timeoff/${oid}`, { method: "DELETE" }); load(); }
 
@@ -150,7 +153,7 @@ export default function StaffDetailPage() {
             <Card className="p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Ferie e assenze</h2>
-                <Button size="sm" onClick={() => { setOff({ starts_at: "", ends_at: "", reason: "" }); setOffErr(""); setOffOpen(true); }}><Plus size={14} /> Aggiungi</Button>
+                <Button size="sm" onClick={() => { setOff(emptyOff); setOffErr(""); setOffOpen(true); }}><Plus size={14} /> Aggiungi</Button>
               </div>
               {timeOff.length === 0 ? <p className="text-sm text-faint py-3 text-center">Nessuna assenza programmata.</p> : (
                 <div className="space-y-1">{timeOff.map((t) => (<div key={t.id} className="flex items-center gap-3 py-2 border-t first:border-t-0" style={{ borderColor: "var(--border)" }}><CalendarOff size={15} className="text-faint shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm" style={{ color: "var(--text)" }}>{fmtDT(t.starts_at)} → {fmtDT(t.ends_at)}</p>{t.reason && <p className="text-xs text-muted">{t.reason}</p>}</div><button onClick={() => delOff(t.id)} className="text-faint hover:text-[var(--danger)]"><Trash2 size={13} /></button></div>))}</div>
@@ -169,8 +172,14 @@ export default function StaffDetailPage() {
 
       <Modal open={offOpen} onClose={() => setOffOpen(false)} title="Aggiungi assenza">
         <div className="space-y-3">
-          <Field label="Dal"><Input type="datetime-local" value={off.starts_at} onChange={(e) => setOff({ ...off, starts_at: e.target.value })} /></Field>
-          <Field label="Al"><Input type="datetime-local" value={off.ends_at} onChange={(e) => setOff({ ...off, ends_at: e.target.value })} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Dal giorno"><DateField value={off.startDate} onChange={(v) => setOff({ ...off, startDate: v })} min={todayLocal()} /></Field>
+            <Field label="Ora inizio"><TimeField value={off.startTime} onChange={(v) => setOff({ ...off, startTime: v })} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Al giorno"><DateField value={off.endDate} onChange={(v) => setOff({ ...off, endDate: v })} min={off.startDate || todayLocal()} /></Field>
+            <Field label="Ora fine"><TimeField value={off.endTime} onChange={(v) => setOff({ ...off, endTime: v })} /></Field>
+          </div>
           <Field label="Motivo (opzionale)"><Input value={off.reason} onChange={(e) => setOff({ ...off, reason: e.target.value })} placeholder="ferie, malattia…" /></Field>
         </div>
         {offErr && <p className="text-xs mt-3" style={{ color: "var(--danger)" }}>{offErr}</p>}

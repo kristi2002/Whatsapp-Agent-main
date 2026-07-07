@@ -60,6 +60,7 @@ describe("executeTool routing", () => {
       message: "Orari disponibili",
       service: "Taglio donna",
       options: [{ iso: "2025-07-15T08:00:00.000Z", label: "10:00", stylists: ["Genny"] }],
+      allFreeTimes: [],
     });
     expect(booking.checkAvailability).toHaveBeenCalledWith(
       expect.objectContaining({ service: "Taglio", date: "2025-07-15", now: ctx.now })

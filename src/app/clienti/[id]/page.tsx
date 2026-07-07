@@ -7,6 +7,7 @@ import { ArrowLeft, Pencil, Trash2, Plus, Minus, Receipt, X, Printer, FlaskConic
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
 import { SALON } from "@/lib/salon-config";
+import { DateField } from "@/components/pickers";
 import { loyaltyTier } from "@/lib/loyalty";
 import type { ClientRow, Sale, SaleItem, ColorSession, ColorSessionItem, ProductRow, ServiceRow, AppointmentWithRelations } from "@/lib/gestionale-types";
 
@@ -206,7 +207,7 @@ export default function ClientDetailPage() {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3"><Field label="Nome"><Input value={eform.name} onChange={(e) => setEform({ ...eform, name: e.target.value })} /></Field><Field label="Telefono"><Input value={eform.phone} onChange={(e) => setEform({ ...eform, phone: e.target.value })} /></Field></div>
           <Field label="Email"><Input value={eform.email} onChange={(e) => setEform({ ...eform, email: e.target.value })} /></Field>
-          <div className="grid grid-cols-2 gap-3"><Field label="Compleanno"><Input type="date" value={eform.birthdate} onChange={(e) => setEform({ ...eform, birthdate: e.target.value })} /></Field><Field label="Data patch test"><Input type="date" value={eform.patch_test_date} onChange={(e) => setEform({ ...eform, patch_test_date: e.target.value })} /></Field></div>
+          <div className="grid grid-cols-2 gap-3"><Field label="Compleanno"><DateField value={eform.birthdate} onChange={(v) => setEform({ ...eform, birthdate: v })} /></Field><Field label="Data patch test"><DateField value={eform.patch_test_date} onChange={(v) => setEform({ ...eform, patch_test_date: v })} /></Field></div>
           <Field label="Allergie / note mediche"><Input value={eform.allergies} onChange={(e) => setEform({ ...eform, allergies: e.target.value })} placeholder="es. allergia PPD" /></Field>
           <Field label="Esito patch test"><Input value={eform.patch_test_result} onChange={(e) => setEform({ ...eform, patch_test_result: e.target.value })} placeholder="es. negativo" /></Field>
         </div>
@@ -219,7 +220,7 @@ export default function ClientDetailPage() {
           <div>
             <p className="text-[11px] uppercase tracking-wide text-faint mb-2">Diagnosi</p>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Data"><Input type="date" value={sess.date} onChange={(e) => setSess({ ...sess, date: e.target.value })} /></Field>
+              <Field label="Data"><DateField value={sess.date} onChange={(v) => setSess({ ...sess, date: v })} /></Field>
               <Field label="Operatore"><Select value={sess.stylist_id} onChange={(e) => setSess({ ...sess, stylist_id: e.target.value })}><option value="">—</option>{stylists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
               <Field label="Base naturale (1-10)"><Input type="number" value={sess.base_level} onChange={(e) => setSess({ ...sess, base_level: e.target.value })} /></Field>
               <Field label="% bianchi"><Input type="number" value={sess.white_pct} onChange={(e) => setSess({ ...sess, white_pct: e.target.value })} /></Field>

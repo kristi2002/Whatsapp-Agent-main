@@ -8,7 +8,7 @@ import { formatZoned } from "@/lib/timezone";
  * WhatsApp profile) is injected so the model never has to ask for it.
  * Services, prices and availability are NOT hard-coded — the model uses tools.
  */
-export function buildSalonSystemPrompt(now: Date = new Date(), customerName?: string | null): string {
+export function buildSalonSystemPrompt(now: Date = new Date(), customerName?: string | null, hoursLabel?: string | null): string {
   const nowLabel = formatZoned(now, SALON.timezone, SALON.locale);
   const isoDate = new Intl.DateTimeFormat("en-CA", { timeZone: SALON.timezone }).format(now); // YYYY-MM-DD
 
@@ -35,6 +35,8 @@ ${nameBlock}
   1. Capisci quale servizio vuole (usa "list_services" se non è chiaro o se chiede l'elenco/i prezzi).
   2. Usa "check_availability" con servizio + data (+ parrucchiere se richiesto) per proporre orari reali.
   3. Proponi orari SPECIFICI e distinti tra quelli restituiti da check_availability (es. \"10:00, 12:30, 16:00\"), distribuiti nell'arco della giornata. NON riassumere MAI in intervalli o fasce (mai \"dalle 9:00 alle 10:45\"): elenca i singoli orari. Mostrane 3-5 e fai scegliere.
+  3b. check_availability restituisce due liste: "options" (pochi orari da SUGGERIRE) e "allFreeTimes" (TUTTI gli orari realmente liberi). Se il cliente chiede un orario PRECISO (es. "le 16:00"), cercalo in "allFreeTimes": se c'è, è disponibile — procedi usando il suo iso. NON dire che un orario non è disponibile solo perché non è tra quelli suggeriti.
+  3c. Se un orario davvero non è tra "allFreeTimes", di' semplicemente che non è libero e proponi i più vicini. NON inventare MAI il motivo (non dire "ha una pausa" o "ha un altro appuntamento"): non conosci il motivo.
   4. **Appena il cliente sceglie un orario, COMPLETA SUBITO la prenotazione**: se non hai lo startIso esatto in memoria (es. è un nuovo messaggio), richiama prima "check_availability" per la stessa data, individua l'orario scelto e poi chiama IMMEDIATAMENTE "book_appointment" con lo startIso ESATTO restituito. Passa il nome (del cliente o del profilo). Non fare altre domande.
   5. Conferma l'appuntamento con data, ora, servizio e parrucchiere SOLO dopo che "book_appointment" ha avuto successo.
 - Non dire mai "confermo/ho prenotato" se non hai davvero chiamato "book_appointment" con esito positivo.
@@ -48,7 +50,7 @@ ${nameBlock}
 - Indirizzo: ${SALON.address}
 - Telefono: ${SALON.phone}
 - Email: ${SALON.email}
-(Per gli orari di apertura precisi affidati agli strumenti; puoi indicare i giorni di chiusura se emergono da check_availability.)
+${hoursLabel ? `\n## Orari di apertura\n${hoursLabel}\nNON proporre né confermare MAI appuntamenti nei giorni di chiusura o fuori dagli orari di apertura qui sopra. Se il cliente chiede un giorno o un orario in cui il salone è chiuso, faglielo presente con gentilezza e proponi il giorno aperto più vicino.` : "(Per gli orari di apertura precisi affidati agli strumenti; puoi indicare i giorni di chiusura se emergono da check_availability.)"}
 
 ## Limiti
 - Non dare consigli medici o dermatologici specifici: per problemi di cute o allergie invita a parlare con lo staff in salone.

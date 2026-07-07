@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Check, ChevronLeft, Scissors, Clock } from "lucide-react";
 import { Button, Input } from "@/components/ui";
+import { DateField } from "@/components/pickers";
 
 const TZ = "Europe/Rome";
 const euro = (c: number | null) => (c == null ? "" : "€" + (c / 100).toFixed(2).replace(".", ","));
@@ -99,7 +100,7 @@ export default function PrenotaPage() {
             {step === 2 && (
               <div>
                 <p className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Scegli la data</p>
-                <Input type="date" min={todayStr()} max={maxStr()} value={date} onChange={(e) => setDate(e.target.value)} />
+                <DateField value={date} onChange={setDate} min={todayStr()} max={maxStr()} />
                 <div className="flex justify-end mt-4"><Button onClick={() => setStep(3)}>Continua</Button></div>
               </div>
             )}

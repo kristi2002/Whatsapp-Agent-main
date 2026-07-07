@@ -7,7 +7,7 @@ const h = vi.hoisted(() => {
   const builder: Record<string, unknown> = {};
   const methods = [
     "select", "insert", "update", "delete",
-    "eq", "in", "lt", "gt", "gte", "lte", "order", "limit", "single",
+    "eq", "neq", "in", "lt", "gt", "gte", "lte", "order", "limit", "single", "maybeSingle",
   ];
   for (const m of methods) builder[m] = () => builder;
   (builder as { then: unknown }).then = (
@@ -28,6 +28,7 @@ import {
   bookAppointment,
   getAppointmentsForPhone,
   cancelAppointment,
+  formatBusinessHours,
 } from "@/lib/booking";
 
 const NOW = new Date("2025-07-15T10:00:00Z");
@@ -147,6 +148,8 @@ describe("checkAvailability — full slot set for validation (regression)", () =
     for (const o of res.options!) expect(all.has(o.iso)).toBe(true);
     // A free time that is NOT in the sampled display is still in allSlots (bookable).
     expect(res.allSlots!.length).toBeGreaterThan(6);
+    // Each free slot carries a local HH:MM label for exact-time checks.
+    expect(res.allSlots!.every((sl) => /^\d{2}:\d{2}$/.test(sl.time))).toBe(true);
   });
 });
 
@@ -180,5 +183,60 @@ describe("rescheduleAppointment — validates target availability", () => {
     const res = await rescheduleAppointment({ customerPhone: "393330000000", startIso: "2025-07-20T10:00:00.000Z", now: NOW });
     expect(res.ok).toBe(false);
     expect(res.message).toContain("non è disponibile");
+  });
+});
+
+describe("checkAvailability — respects business hours (regression)", () => {
+  it("treats a closed weekday as closed (no slots)", async () => {
+    h.state.queue = [
+      { data: [svc()] },                                   // listActiveServices
+      { data: [{ id: "g", name: "Genny", active: true, created_at: "" }] }, // listActiveStylists
+      { data: [] },                                        // stylist_services caps
+      { data: { day_of_week: 0, is_closed: true, open_time: null, close_time: null, break_start: null, break_end: null } }, // business_hours -> closed
+    ];
+    const res = await checkAvailability({ service: "Taglio donna", date: "2025-07-20", now: NOW }); // Sunday
+    expect(res.options).toEqual([]);
+    expect(res.message).toContain("chiuso");
+  });
+
+  it("treats a day flagged open but with no hours as closed", async () => {
+    h.state.queue = [
+      { data: [svc()] },
+      { data: [{ id: "g", name: "Genny", active: true, created_at: "" }] },
+      { data: [] },
+      { data: { day_of_week: 2, is_closed: false, open_time: null, close_time: null, break_start: null, break_end: null } },
+    ];
+    const res = await checkAvailability({ service: "Taglio donna", date: "2025-07-16", now: NOW });
+    expect(res.options).toEqual([]);
+    expect(res.message).toContain("chiuso");
+  });
+});
+
+describe("formatBusinessHours", () => {
+  it("lists open days with hours and names the closed days", async () => {
+    h.state.queue = [
+      {
+        data: [
+          { day_of_week: 0, is_closed: true, open_time: null, close_time: null },
+          { day_of_week: 1, is_closed: true, open_time: null, close_time: null },
+          { day_of_week: 2, is_closed: false, open_time: "09:00:00", close_time: "19:00:00" },
+          { day_of_week: 3, is_closed: false, open_time: "09:00:00", close_time: "19:00:00" },
+          { day_of_week: 4, is_closed: false, open_time: "09:00:00", close_time: "19:00:00" },
+          { day_of_week: 5, is_closed: false, open_time: "09:00:00", close_time: "19:00:00" },
+          { day_of_week: 6, is_closed: false, open_time: "09:00:00", close_time: "18:00:00" },
+        ],
+      },
+    ];
+    const label = await formatBusinessHours();
+    expect(label).toContain("Chiuso: domenica, lunedì.");
+    expect(label).toContain("martedì: 09:00–19:00");
+    expect(label).toContain("sabato: 09:00–18:00");
+    // Closed days must NOT appear as open lines.
+    expect(label).not.toContain("domenica: ");
+  });
+
+  it("returns an empty string when the table has no rows", async () => {
+    h.state.queue = [{ data: [] }];
+    expect(await formatBusinessHours()).toBe("");
   });
 });

@@ -14,6 +14,12 @@ vi.mock("@/lib/tools", () => ({
   executeTool: (...a: unknown[]) => executeToolMock(...(a as [])),
 }));
 
+// getAIResponse now reads business hours to inject into the prompt; stub it so
+// this suite stays focused on the tool loop (and never touches supabase).
+vi.mock("@/lib/booking", () => ({
+  formatBusinessHours: async () => "Aperto:\n- martedì: 09:00–19:00\nChiuso: domenica, lunedì.",
+}));
+
 import { getAIResponse } from "@/lib/ai";
 
 const ctx = {

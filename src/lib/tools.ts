@@ -150,11 +150,15 @@ export async function executeTool(
           stylist: (args.stylist as string) ?? null,
           now: ctx.now,
         });
-        // Give the model the machine-readable options plus a human message.
+        // options = a few curated times to SUGGEST. allFreeTimes = EVERY free
+        // time, so the model can answer a specific request (e.g. "le 16:00?")
+        // correctly instead of assuming a time is taken just because it was not
+        // among the suggested few.
         return JSON.stringify({
           message: res.message,
           service: res.serviceName,
           options: res.options ?? [],
+          allFreeTimes: (res.allSlots ?? []).map((sl) => ({ time: sl.time, iso: sl.iso })),
         });
       }
       case "book_appointment": {

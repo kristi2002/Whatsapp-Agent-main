@@ -4,9 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Trash2, MessageCircle, Check } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
+import { DateField } from "@/components/pickers";
 import { SALON } from "@/lib/salon-config";
 import type { ServiceRow } from "@/lib/gestionale-types";
 
+const todayStr = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
 const fmtDate = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("it-IT", { day: "2-digit", month: "short" });
 interface WL { id: string; name: string | null; phone: string; service_id: string | null; preferred_date: string | null; notes: string | null; status: string; service?: { name: string } | null }
 
@@ -59,7 +61,7 @@ export default function AttesaPage() {
       <Modal open={open} onClose={() => setOpen(false)} title="Aggiungi alla lista d'attesa">
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3"><Field label="Nome"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field><Field label="Telefono"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="es. 393801234567" /></Field></div>
-          <div className="grid grid-cols-2 gap-3"><Field label="Servizio"><Select value={form.service_id} onChange={(e) => setForm({ ...form, service_id: e.target.value })}><option value="">Qualsiasi</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field><Field label="Data preferita"><Input type="date" value={form.preferred_date} onChange={(e) => setForm({ ...form, preferred_date: e.target.value })} /></Field></div>
+          <div className="grid grid-cols-2 gap-3"><Field label="Servizio"><Select value={form.service_id} onChange={(e) => setForm({ ...form, service_id: e.target.value })}><option value="">Qualsiasi</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field><Field label="Data preferita"><DateField value={form.preferred_date} onChange={(v) => setForm({ ...form, preferred_date: v })} min={todayStr()} /></Field></div>
           <Field label="Note"><Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
         </div>
         {err && <p className="text-xs mt-3" style={{ color: "var(--danger)" }}>{err}</p>}
