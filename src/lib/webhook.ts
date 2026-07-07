@@ -79,16 +79,19 @@ export async function processEvent(body: any): Promise<void> {
   // Human mode — staff will reply from the gestionale; don't auto-answer.
   if (conversation.mode === "human") return;
 
-  // Conversation history for context (last 20 messages).
-  const { data: history } = await supabase
+  // Conversation history for context: the MOST RECENT 20 messages, in
+  // chronological order. Fetch descending + limit (to get the latest, not the
+  // oldest) then reverse so the model reads them oldest -> newest.
+  const { data: recent } = await supabase
     .from("messages")
-    .select("role, content")
+    .select("role, content, created_at")
     .eq("conversation_id", conversation.id)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(20);
+  const history = (recent || []).slice().reverse();
 
   const aiResponse = await getAIResponse(
-    (history || []).map((m: { role: string; content: string }) => ({
+    history.map((m: { role: string; content: string }) => ({
       role: m.role as "user" | "assistant",
       content: m.content,
     })),
