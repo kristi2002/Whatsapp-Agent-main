@@ -240,3 +240,43 @@ describe("formatBusinessHours", () => {
     expect(await formatBusinessHours()).toBe("");
   });
 });
+
+describe("checkAvailability — respects stylist ferie / time-off (agent path)", () => {
+  const stylist = { id: "g", name: "Genny", active: true, created_at: "" };
+  const HOURS_OPEN = { day_of_week: 3, is_closed: false, open_time: "09:00", close_time: "19:00", break_start: null, break_end: null };
+  // NOTE: 2025-07-16 is CEST (UTC+2), so 09:00 Rome = 07:00Z, 19:00 Rome = 17:00Z.
+
+  it("returns no slots when the only stylist is on ferie for the whole day", async () => {
+    h.state.queue = [
+      { data: [svc()] },                                   // listActiveServices
+      { data: [stylist] },                                 // listActiveStylists
+      { data: [] },                                        // caps (unrestricted)
+      { data: HOURS_OPEN },                                // business_hours
+      { data: [] },                                        // appointments
+      { data: [] },                                        // stylist_hours
+      { data: [{ stylist_id: "g", starts_at: "2025-07-16T06:00:00.000Z", ends_at: "2025-07-16T18:00:00.000Z" }] }, // stylist_time_off — full day
+    ];
+    const res = await checkAvailability({ service: "Taglio donna", date: "2025-07-16", now: NOW });
+    expect(res.ok).toBe(true);
+    expect(res.allSlots ?? []).toHaveLength(0);
+    expect(res.options ?? []).toHaveLength(0);
+  });
+
+  it("removes only the slots overlapping a partial ferie window", async () => {
+    h.state.queue = [
+      { data: [svc()] },
+      { data: [stylist] },
+      { data: [] },
+      { data: HOURS_OPEN },
+      { data: [] },
+      { data: [] },
+      { data: [{ stylist_id: "g", starts_at: "2025-07-16T07:00:00.000Z", ends_at: "2025-07-16T11:00:00.000Z" }] }, // off 09:00–13:00 Rome
+    ];
+    const res = await checkAvailability({ service: "Taglio donna", date: "2025-07-16", now: NOW });
+    expect(res.ok).toBe(true);
+    const times = new Set((res.allSlots ?? []).map((s) => s.time));
+    expect(times.has("09:00")).toBe(false); // start of ferie
+    expect(times.has("10:00")).toBe(false); // inside ferie
+    expect(times.has("15:00")).toBe(true);  // afternoon, well clear of ferie
+  });
+});

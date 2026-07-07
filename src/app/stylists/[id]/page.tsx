@@ -9,6 +9,7 @@ import { Card, Button, Badge, Modal, Field, Input } from "@/components/ui";
 import type { AppointmentWithRelations, ServiceRow } from "@/lib/gestionale-types";
 import type { BusinessHours } from "@/lib/types";
 import { DateField, TimeField } from "@/components/pickers";
+import { zonedWallTimeToUtc } from "@/lib/timezone";
 
 const TZ = "Europe/Rome";
 const todayLocal = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
@@ -85,8 +86,14 @@ export default function StaffDetailPage() {
   async function addOff() {
     setOffErr("");
     if (!off.startDate || !off.endDate) { setOffErr("Indica giorno di inizio e fine."); return; }
-    const start = new Date(`${off.startDate}T${off.startTime || "00:00"}`);
-    const end = new Date(`${off.endDate}T${off.endTime || "23:59"}`);
+    // Interpret the entered day/time as SALON (Europe/Rome) wall time, not the
+    // browser's timezone, so ferie windows line up with bookings on the server.
+    const [sy, sm, sd] = off.startDate.split("-").map(Number);
+    const [sh, smin] = (off.startTime || "00:00").split(":").map(Number);
+    const [ey, em, ed] = off.endDate.split("-").map(Number);
+    const [eh, emin] = (off.endTime || "23:59").split(":").map(Number);
+    const start = zonedWallTimeToUtc(sy, sm, sd, sh, smin, TZ);
+    const end = zonedWallTimeToUtc(ey, em, ed, eh, emin, TZ);
     const res = await fetch(`/api/stylists/${id}/timeoff`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starts_at: start.toISOString(), ends_at: end.toISOString(), reason: off.reason }) });
     if (!res.ok) { setOffErr((await res.json()).error || "Errore."); return; }
     setOffOpen(false); setOff(emptyOff); load();
