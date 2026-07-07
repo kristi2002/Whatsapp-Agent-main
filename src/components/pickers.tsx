@@ -11,14 +11,25 @@ const todayStr = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format
 
 /** Lightweight themed popover with click-outside handling. */
 function Popover({ trigger, children, open, setOpen }: { trigger: React.ReactNode; children: React.ReactNode; open: boolean; setOpen: (v: boolean) => void }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  // Close on a pointer press outside the popover. Registered in an effect so it
+  // only becomes active AFTER the click that opened the popover. The previous
+  // approach — a full-screen `fixed inset-0` backdrop button — caught that same
+  // opening click when the picker lived inside a modal (Radix Dialog renders its
+  // content in a portal), so the calendar opened and closed on one click.
+  React.useEffect(() => {
+    if (!open) return;
+    function onOutside(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", onOutside, true);
+    return () => document.removeEventListener("pointerdown", onOutside, true);
+  }, [open, setOpen]);
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <div onClick={() => setOpen(!open)}>{trigger}</div>
       {open && (
-        <>
-          <button aria-hidden className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div className="absolute z-50 mt-1 rounded-xl p-2" style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>{children}</div>
-        </>
+        <div className="absolute z-50 mt-1 rounded-xl p-2" style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>{children}</div>
       )}
     </div>
   );
