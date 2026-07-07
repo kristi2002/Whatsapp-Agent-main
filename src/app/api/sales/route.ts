@@ -17,11 +17,15 @@ export async function POST(request: NextRequest) {
   const { error: itErr } = await supabase.from("sale_items").insert(rows);
   if (itErr) return Response.json({ error: itErr.message }, { status: 500 });
 
-  // Decrement stock for product line items.
+  // Decrement stock for product line items and log the movement.
   for (const it of items) {
     if (it.kind === "product" && it.product_id) {
+      const qty = Number(it.qty) || 1;
       const { data: p } = await supabase.from("products").select("stock_qty").eq("id", it.product_id).single();
-      if (p) await supabase.from("products").update({ stock_qty: Math.max(0, p.stock_qty - (Number(it.qty) || 1)) }).eq("id", it.product_id);
+      if (p) {
+        await supabase.from("products").update({ stock_qty: Math.max(0, p.stock_qty - qty) }).eq("id", it.product_id);
+        await supabase.from("stock_movements").insert({ product_id: it.product_id, delta: -qty, reason: "vendita", ref: sale.id });
+      }
     }
   }
   // Loyalty: award 1 point per euro on the sale total.

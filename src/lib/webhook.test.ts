@@ -24,13 +24,13 @@ const h = vi.hoisted(() => {
 });
 
 const aiMock = vi.fn(async () => "Ciao! Come posso aiutarti?");
-const sendMock = vi.fn(async () => ({ ok: true }));
+const sendMock = vi.fn(async (_phone: string, _msg: string) => ({ ok: true }));
 
 vi.mock("@/lib/supabase", () => ({ supabase: h.supabase, getSupabase: () => h.supabase }));
 vi.mock("@/lib/ai", () => ({ getAIResponse: (...a: unknown[]) => aiMock(...(a as [])) }));
-vi.mock("@/lib/whatsapp", () => ({ sendWhatsAppMessage: (...a: unknown[]) => sendMock(...(a as [])) }));
+vi.mock("@/lib/whatsapp", () => ({ sendWhatsAppMessage: (...a: unknown[]) => sendMock(...(a as [string, string])) }));
 
-import { verifySignature, processEvent } from "@/lib/webhook";
+import { verifySignature, processEvent, runSerial } from "@/lib/webhook";
 
 function textPayload(body: string, name = "Mario") {
   return {
@@ -133,5 +133,66 @@ describe("processEvent", () => {
     await processEvent(textPayload("Ciao"));
     expect(aiMock).not.toHaveBeenCalled();
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("sends a fallback reply when the AI call throws (no silent failure)", async () => {
+    aiMock.mockRejectedValueOnce(new Error("openrouter down"));
+    h.state.queue = [
+      { data: { id: "c1", mode: "agent", name: "Mario" } }, // existing conversation
+      { error: null }, // insert user message
+      {}, // update timestamp
+      { data: [] }, // history
+    ];
+    await processEvent(textPayload("Ciao"));
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][1]).toContain("problema tecnico");
+  });
+
+  it("acknowledges a non-text message with a text-only note (agent mode)", async () => {
+    const p = textPayload("x");
+    p.entry[0].changes[0].value.messages[0].type = "audio";
+    h.state.queue = [{ data: { id: "c1", mode: "agent", name: "Mario" } }]; // existing conversation
+    await processEvent(p);
+    expect(aiMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][1]).toContain("solo messaggi di testo");
+  });
+
+  it("processes EVERY message in a batch, not just the first", async () => {
+    const batch = {
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{ value: {
+        contacts: [{ profile: { name: "Mario" } }],
+        messages: [
+          { from: "393330000000", id: "wamid.1", type: "text", text: { body: "uno" } },
+          { from: "393330000000", id: "wamid.2", type: "text", text: { body: "due" } },
+        ],
+      } }] }],
+    };
+    // Two full agent cycles (select, insertUser, updateTs, history, insertAssistant, updateTs).
+    const conv = { data: { id: "c1", mode: "agent", name: "Mario" } };
+    h.state.queue = [
+      conv, { error: null }, {}, { data: [] }, {}, {},
+      conv, { error: null }, {}, { data: [] }, {}, {},
+    ];
+    await processEvent(batch);
+    expect(aiMock).toHaveBeenCalledTimes(2);
+    expect(sendMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("runSerial", () => {
+  it("serializes tasks with the same key, runs different keys in parallel", async () => {
+    const events: string[] = [];
+    const mk = (id: string, ms: number) => async () => {
+      events.push(`${id}:start`);
+      await new Promise((r) => setTimeout(r, ms));
+      events.push(`${id}:end`);
+    };
+    const p1 = runSerial("A", mk("1", 25));
+    const p2 = runSerial("A", mk("2", 1)); // same key -> must wait for task 1
+    const p3 = runSerial("B", mk("3", 1)); // different key -> independent
+    await Promise.all([p1, p2, p3]);
+    expect(events.indexOf("2:start")).toBeGreaterThan(events.indexOf("1:end"));
   });
 });

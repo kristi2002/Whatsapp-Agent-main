@@ -107,7 +107,10 @@ export interface AvailabilityResult {
   serviceId?: string;
   serviceName?: string;
   durationMin?: number;
+  /** Sampled subset shown to the customer (spread across the day). */
   options?: Array<{ iso: string; label: string; stylists: string[] }>;
+  /** ALL genuinely-free slots (unsampled) — used for booking validation. */
+  allSlots?: Array<{ iso: string; stylists: string[] }>;
 }
 
 export async function checkAvailability(params: {
@@ -115,6 +118,8 @@ export async function checkAvailability(params: {
   date: string; // YYYY-MM-DD (local)
   stylist?: string | null;
   now?: Date;
+  /** Ignore this appointment when computing busy time (used when rescheduling it). */
+  excludeAppointmentId?: string;
 }): Promise<AvailabilityResult> {
   const now = params.now ?? new Date();
   const services = await listActiveServices();
@@ -192,8 +197,10 @@ export async function checkAvailability(params: {
   const weekday = weekdayOf(params.date);
   const consideredIds = consider.map((s) => s.id);
 
+  let apptsQuery = supabase.from("appointments").select("id, stylist_id, starts_at, ends_at, status").in("status", ["booked", "completed"]).lt("starts_at", dayEnd.toISOString()).gt("ends_at", dayStart.toISOString());
+  if (params.excludeAppointmentId) apptsQuery = apptsQuery.neq("id", params.excludeAppointmentId);
   const [apptsRes, shRes, offRes] = await Promise.all([
-    supabase.from("appointments").select("stylist_id, starts_at, ends_at, status").in("status", ["booked", "completed"]).lt("starts_at", dayEnd.toISOString()).gt("ends_at", dayStart.toISOString()),
+    apptsQuery,
     consideredIds.length ? supabase.from("stylist_hours").select("*").eq("day_of_week", weekday).in("stylist_id", consideredIds) : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
     consideredIds.length ? supabase.from("stylist_time_off").select("stylist_id, starts_at, ends_at").in("stylist_id", consideredIds).lt("starts_at", dayEnd.toISOString()).gt("ends_at", dayStart.toISOString()) : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
   ]);
@@ -236,6 +243,11 @@ export async function checkAvailability(params: {
     label: formatZoned(g.startUtc, TZ, LOCALE),
     stylists: g.stylists.map((s) => s.name),
   }));
+  // Full free-slot set (every valid start time), for booking validation.
+  const allSlots = groupedAll.map((g) => ({
+    iso: g.startUtc.toISOString(),
+    stylists: g.stylists.map((s) => s.name),
+  }));
 
   return {
     ok: true,
@@ -243,6 +255,7 @@ export async function checkAvailability(params: {
     serviceName: service.name,
     durationMin: service.duration_min,
     options,
+    allSlots,
     message:
       options.length === 0
         ? "Non ci sono orari liberi in quella data. Vuoi provare un altro giorno?"
@@ -299,7 +312,9 @@ export async function bookAppointment(params: {
     stylist: params.stylist,
     now,
   });
-  const match = avail.options?.find((o) => o.iso === start.toISOString());
+  // Validate against ALL free slots (not the sampled display subset), so a
+  // genuinely-free time is never wrongly rejected just because it was not shown.
+  const match = avail.allSlots?.find((o) => o.iso === start.toISOString());
   if (!match) {
     return {
       ok: false,
@@ -475,6 +490,23 @@ export async function rescheduleAppointment(params: {
   const stylists = await listActiveStylists();
   const requested = params.stylist ? matchStylist(stylists, params.stylist) : null;
 
+  // Validate the target slot is genuinely available (salon open, operator
+  // working, no conflict) — ignoring THIS appointment's own current booking so
+  // a small shift of the same appointment is allowed.
+  const p = getZonedParts(start, TZ);
+  const targetDate = `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+  const targetStylistId = requested?.id ?? appt.stylist_id;
+  const avail = await checkAvailability({
+    service: service?.id ?? appt.service_id,
+    date: targetDate,
+    stylist: targetStylistId,
+    now,
+    excludeAppointmentId: appt.id,
+  });
+  if (!avail.allSlots?.some((o) => o.iso === start.toISOString())) {
+    return { ok: false, message: "Quell'orario non è disponibile. " + (avail.message || "") };
+  }
+
   const update: Record<string, unknown> = { starts_at: start.toISOString(), ends_at: end.toISOString(), updated_at: now.toISOString() };
   if (requested) update.stylist_id = requested.id;
   if (service && params.service) update.service_id = service.id;
@@ -490,4 +522,16 @@ export async function rescheduleAppointment(params: {
     appointmentId: appt.id,
     message: `Appuntamento spostato a ${formatZoned(start, TZ, LOCALE)}${finalStylist ? ` con ${finalStylist.name}` : ""}.`,
   };
+}
+
+/** Number of self-service (online) bookings this phone made in the last 24h. */
+export async function recentOnlineBookingCount(phone: string, now: Date = new Date()): Promise<number> {
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await supabase
+    .from("appointments")
+    .select("id", { count: "exact", head: true })
+    .eq("customer_phone", phone)
+    .eq("source", "online")
+    .gte("created_at", since);
+  return count ?? 0;
 }

@@ -37,4 +37,14 @@ describe("sendWhatsAppMessage", () => {
     });
     expect(result).toEqual({ messages: [{ id: "wamid.out" }] });
   });
+
+  it("throws when Meta returns a non-2xx response (e.g. expired token)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: "Error validating access token" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    await expect(sendWhatsAppMessage("393330000000", "Ciao!")).rejects.toThrow(/WhatsApp send failed \(401\)/);
+  });
 });
