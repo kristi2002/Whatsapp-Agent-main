@@ -24,16 +24,25 @@ export default function AppuntamentiPage() {
   const [to, setTo] = useState(plusDays(30));
   const [status, setStatus] = useState(""); const [op, setOp] = useState(""); const [src, setSrc] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const d = await fetch(`/api/appointments?from=${from}&to=${to}`).then((r) => r.json());
-    setAppts(Array.isArray(d) ? d : []); setLoading(false);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const d = await fetch(`/api/appointments?from=${from}&to=${to}`).then((r) => r.json());
+      setAppts(Array.isArray(d) ? d : []);
+    } catch { /* keep last-known data on a transient fetch error */ }
+    if (!silent) setLoading(false);
   }, [from, to]);
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ load(); }, [load]);
+  // Silently re-fetch so appointments created/cancelled elsewhere (e.g. the
+  // WhatsApp agent) appear without a manual page refresh. Silent = no spinner.
+  useEffect(() => { const t = setInterval(() => load(true), 20_000); return () => clearInterval(t); }, [load]);
   useEffect(() => { fetch("/api/stylists").then((r) => r.json()).then((st) => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ setStylists((st as { id: string; name: string }[]).map((s) => ({ id: s.id, name: s.name }))); }); }, []);
 
   const filtered = useMemo(() => appts.filter((a) => {
-    if (status && a.status !== status) return false;
+    // No explicit status filter: hide cancelled so a cancelled appointment
+    // "disappears". Selecting "Annullato" in the filter still shows them.
+    if (status) { if (a.status !== status) return false; }
+    else if (a.status === "cancelled") return false;
     if (op && a.stylist_id !== op) return false;
     if (src && a.source !== src) return false;
     return true;
