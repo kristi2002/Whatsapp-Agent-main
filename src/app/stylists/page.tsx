@@ -2,11 +2,14 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Modal, Field, Input } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
+import { StatCard, Avatar } from "@/components/kit";
 import type { ServiceRow } from "@/lib/gestionale-types";
+
+const initials = (name: string) => name.split(" ").map((w) => w[0]).slice(0, 2).join("");
 
 interface StylistRow { id: string; name: string; active: boolean; service_ids: string[] }
 
@@ -36,6 +39,7 @@ export default function StylistsPage() {
   }), [stylists, q, status]);
   const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 12);
   const activeFilters = (q ? 1 : 0) + (status !== "active" ? 1 : 0);
+  const summary = useMemo(() => ({ active: stylists.filter((s) => s.active).length, total: stylists.length }), [stylists]);
 
   function openNew() { setName(""); setServiceIds([]); setEditing("new"); setError(""); }
   function openEdit(s: StylistRow) { setName(s.name); setServiceIds(s.service_ids); setEditing(s.id); setError(""); }
@@ -51,6 +55,11 @@ export default function StylistsPage() {
 
   return (
     <AppShell title="Staff" subtitle="Chi lavora e cosa esegue determina cosa può prenotare l'assistente." actions={<Button size="sm" onClick={openNew}><Plus size={15} /> <span className="hidden sm:inline">Aggiungi</span></Button>}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <StatCard icon={Users} value={summary.active} label="Staff attivo" />
+        <StatCard icon={Users} value={summary.total} label="Totale" />
+      </div>
+
       <Filters activeCount={activeFilters} onReset={() => { setQ(""); setStatus("active"); }}>
         <FilterField label="Cerca"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome" /></FilterField>
         <FilterField label="Stato"><select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full h-9 px-3 rounded-lg text-sm appearance-none" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }}><option value="active">Attivi</option><option value="inactive">Disattivati</option><option value="all">Tutti</option></select></FilterField>
@@ -62,7 +71,7 @@ export default function StylistsPage() {
             {pageItems.map((s) => (
               <Card key={s.id} className={`p-4 ${s.active ? "" : "opacity-40"}`}>
                 <Link href={`/stylists/${s.id}`} className="flex items-center gap-3 mb-3 group">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}>{s.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}</div>
+                  <Avatar initials={initials(s.name)} size={44} />
                   <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate group-hover:text-accent transition-colors" style={{ color: "var(--text)" }}>{s.name}</p><p className="text-xs text-muted">{s.service_ids.length === 0 ? "Tutti i servizi" : `${s.service_ids.length} servizi`}</p></div>
                 </Link>
                 <div className="flex items-center gap-3 justify-end">

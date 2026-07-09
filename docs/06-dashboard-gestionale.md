@@ -68,7 +68,19 @@ mobile: slide-in drawer with backdrop, closes on navigation.
   primary/secondary/ghost/danger), `Card`, `Badge`, `Input`/`Select`, `Field`,
   `Modal` (Radix Dialog). `data-ui.tsx`: `Filters`, `FilterField`, `Pagination`,
   `usePagination`. `pickers.tsx`: `DateField`, `TimeField`, `Popover`
-  (Monday-first calendar; click-outside close).
+  (Monday-first calendar; click-outside close). `kit.tsx`: `StatCard` (icon chip
+  + big tabular number + label) and `Avatar` (initials, optional loyalty-tier
+  ring) — the building blocks of the summary strips.
+
+### "Command-center" treatment (applied across pages)
+Every list/dashboard page opens with a **summary strip** of `StatCard`s computed
+from that page's already-fetched data — never fabricated metrics. Examples:
+Panoramica (KPIs + today-agenda timeline + a live **Attività WhatsApp** panel),
+Calendario (today total / completati / rimanenti / incasso previsto from service
+prices), Clienti & Fedeltà (totals + loyalty-tier-ringed avatars), Magazzino
+(prodotti / sotto scorta / esauriti / valore), Appuntamenti, Attesa, Ricettario,
+Servizi, Staff, Orari. The palette/typography are unchanged — the tokens in
+`globals.css` were already the design system; this pass adds information design.
 
 ---
 
@@ -76,15 +88,16 @@ mobile: slide-in drawer with backdrop, closes on navigation.
 
 - **Supabase Realtime** (browser, anon key) on **`/chat`**: subscribes to
   `postgres_changes` — INSERT on `messages` (append live) and `*` on
-  `conversations` (refetch list). This is how staff see incoming WhatsApp messages
-  instantly.
-- **Polling fallback**: Panoramica, Calendario, Appuntamenti refetch every **20 s**
-  and on window focus, so bookings made by the AI or other staff appear without a
-  manual reload.
+  `conversations` (refetch list). Push-based; a progressive enhancement.
+- **Polling fallback on `/chat`**: refetches conversations + open messages every
+  **5 s** and on window focus, through the authenticated `/api/*` routes. This
+  keeps live chat working **even after RLS is enabled** (which stops anon Realtime
+  by design). Other pages (Panoramica, Calendario, Appuntamenti) poll every 20 s.
 
-> ⚠️ Realtime uses the public **anon** key in the browser. Enable **Row-Level
-> Security** in Supabase so that key can't read table data around the login gate
-> (see [08-deployment.md](08-deployment.md)).
+> ⚠️ Realtime uses the public **anon** key in the browser. **`supabase-migration-9.sql`
+> enables Row-Level Security** so that key can't read table data around the login
+> gate; after applying it, `/chat` relies on the polling fallback above. Run it
+> before going live (see [08-deployment.md](08-deployment.md)).
 
 ---
 

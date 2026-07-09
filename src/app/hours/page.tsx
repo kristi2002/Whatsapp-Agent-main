@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { CalendarCheck, CalendarOff } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button } from "@/components/ui";
+import { StatCard } from "@/components/kit";
 import { TimeField } from "@/components/pickers";
 import type { BusinessHours } from "@/lib/types";
 
@@ -26,6 +28,11 @@ export default function HoursPage() {
 
   function update(day: number, patch: Partial<BusinessHours>) { setRows((p) => ({ ...p, [day]: { ...p[day], ...patch } })); }
 
+  const summary = useMemo(() => {
+    const all = Object.values(rows);
+    return { open: all.filter((r) => !r.is_closed).length, closed: all.filter((r) => r.is_closed).length };
+  }, [rows]);
+
   async function saveAll() {
     setSaving(true);
     for (const d of ORDER) {
@@ -37,6 +44,12 @@ export default function HoursPage() {
 
   return (
     <AppShell title="Orari di apertura" subtitle="Gli orari determinano gli slot proposti in chat." actions={<Button size="sm" onClick={saveAll} disabled={saving}>{saving ? "Salvataggio…" : saved ? "✓ Salvato" : "Salva orari"}</Button>}>
+      {!loading && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <StatCard icon={CalendarCheck} value={summary.open} label="Giorni aperti" />
+          <StatCard icon={CalendarOff} value={summary.closed} label="Giorni di chiusura" />
+        </div>
+      )}
       {loading ? <p className="text-sm text-muted">Caricamento…</p> : (
         <Card className="divide-y" style={{ borderColor: "var(--border)" }}>
           {ORDER.map((day) => {

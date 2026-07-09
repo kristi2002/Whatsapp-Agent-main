@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Package, AlertTriangle, ArrowDownUp, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Pencil, Package, AlertTriangle, ArrowDownUp, ArrowUp, ArrowDown, Euro } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
+import { StatCard } from "@/components/kit";
 import type { ProductRow } from "@/lib/gestionale-types";
 
 const empty = { name: "", brand: "", category: "", sku: "", price_euro: "", cost_euro: "", stock_qty: "0", low_stock_threshold: "3" };
@@ -40,6 +41,15 @@ export default function MagazzinoPage() {
   }), [products, q, cat, stock, showInactive]);
   const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 12);
   const activeFilters = (q ? 1 : 0) + (cat ? 1 : 0) + (stock ? 1 : 0) + (showInactive ? 1 : 0);
+  const summary = useMemo(() => {
+    const valueCents = products.reduce((s, p) => s + p.stock_qty * (p.cost_cents ?? 0), 0);
+    return {
+      total: products.length,
+      low: products.filter((p) => p.stock_qty > 0 && p.stock_qty <= p.low_stock_threshold).length,
+      out: products.filter((p) => p.stock_qty === 0).length,
+      value: `€ ${Math.round(valueCents / 100)}`,
+    };
+  }, [products]);
 
   function openNew() { setForm(empty); setEditing("new"); setError(""); }
   function openEdit(p: ProductRow) { setForm({ name: p.name, brand: p.brand ?? "", category: p.category ?? "", sku: p.sku ?? "", price_euro: p.price_cents == null ? "" : (p.price_cents / 100).toFixed(2), cost_euro: p.cost_cents == null ? "" : (p.cost_cents / 100).toFixed(2), stock_qty: String(p.stock_qty), low_stock_threshold: String(p.low_stock_threshold) }); setEditing(p.id); setError(""); }
@@ -65,6 +75,13 @@ export default function MagazzinoPage() {
 
   return (
     <AppShell title="Magazzino" subtitle="Prodotti in vendita, scorte e movimenti." actions={<Button size="sm" onClick={openNew}><Plus size={15} /> <span className="hidden sm:inline">Aggiungi</span></Button>}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <StatCard icon={Package} value={summary.total} label="Prodotti" />
+        <StatCard icon={AlertTriangle} value={summary.low} label="Sotto scorta" />
+        <StatCard icon={AlertTriangle} value={summary.out} label="Esauriti" />
+        <StatCard icon={Euro} value={summary.value} label="Valore magazzino" />
+      </div>
+
       <Filters activeCount={activeFilters} onReset={() => { setQ(""); setCat(""); setStock(""); setShowInactive(false); }}>
         <FilterField label="Cerca"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome, marca, SKU" /></FilterField>
         <FilterField label="Categoria"><Select value={cat} onChange={(e) => setCat(e.target.value)}><option value="">Tutte</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}</Select></FilterField>

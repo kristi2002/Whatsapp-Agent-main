@@ -7,8 +7,9 @@ hours are local wall-clock (`Europe/Rome`)**.
 ## How the schema is applied
 - **`supabase-schema.sql`** — base schema + seed (services, stylists, hours). Run
   it first in the Supabase SQL Editor. Enables `btree_gist` and Realtime.
-- **`supabase-migration-2.sql` … `-8.sql`** — run **in order**. Each is idempotent
+- **`supabase-migration-2.sql` … `-9.sql`** — run **in order**. Each is idempotent
   (`create ... if not exists`, `add column if not exists`), safe to re-run.
+  Migration 9 enables RLS (see §9b).
 - `inspect.sql` is an ad-hoc inspection helper (not part of the migration chain).
 
 ---
@@ -161,6 +162,22 @@ Extends `appointments.source` check to include **`'online'`** (self-service widg
   `created_at`. Immutable ledger. **1 point per euro spent** is awarded in
   `POST /api/sales`. Tiers (`src/lib/loyalty.ts`): Bronzo 0–99 · Argento 100–299 ·
   Oro 300–599 · Platino 600+.
+
+---
+
+## 9b. Migration 9 — Row-Level Security (security hardening)
+
+No new tables. **Enables RLS on every table** (`enable` + `force row level
+security`) with **no permissive policies** → the public `anon` and `authenticated`
+roles get zero direct access. The Next.js server uses the **`service_role`** key,
+which **bypasses RLS**, so all `/api/*` routes are unaffected.
+
+**Why:** the `/chat` dashboard page uses the browser **anon** key for Realtime.
+Without RLS, that key can read/write the whole database directly, bypassing the
+login gate. **Side effect:** browser Realtime via anon stops delivering rows —
+`/chat` falls back to polling the authenticated API. Run this migration before
+going live. To restore true push later, mint a Supabase JWT for logged-in staff
+and add SELECT policies for the `authenticated` role (never re-open `anon`).
 
 ---
 

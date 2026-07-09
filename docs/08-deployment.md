@@ -31,7 +31,7 @@ Open `http://SERVER_IP:8000`, create the admin account, connect your Git provide
 3. Assign `db.testdemo.it`, enable HTTPS, deploy.
 4. In **Supabase Studio → SQL Editor**, run **in order**:
    - `supabase-schema.sql` (base + seed; enables `btree_gist` + Realtime)
-   - `supabase-migration-2.sql` … `supabase-migration-8.sql`
+   - `supabase-migration-2.sql` … `supabase-migration-9.sql` (9 = RLS hardening)
 5. Note three values for the app env:
    - Project/API URL → `NEXT_PUBLIC_SUPABASE_URL` (e.g. `https://db.testdemo.it`)
    - anon public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -84,9 +84,12 @@ Reminders are **not automatic**. To enable:
       with a Meta System-User token (`whatsapp_business_messaging` +
       `whatsapp_business_management`).
 - [ ] **App Secret** set → `WHATSAPP_APP_SECRET` (signature verification on).
-- [ ] **Enable Row-Level Security** on Supabase and scope Realtime. The dashboard
-      uses the public **anon** key in the browser; without RLS that key can read
-      table data directly, bypassing the login gate. **Top priority hardening.**
+- [ ] **Enable Row-Level Security** — run **`supabase-migration-9.sql`**. The
+      dashboard uses the public **anon** key in the browser; without RLS that key
+      can read table data directly, bypassing the login gate. **Top priority
+      hardening.** After it, `/chat` uses its polling fallback (Realtime via anon
+      stops). All `/api/*` routes keep working (server uses `service_role`, which
+      bypasses RLS).
 - [ ] **Rotate** any previously-committed secrets (Meta token, Supabase anon +
       service_role, Supabase MCP token). Scrub git history if ever pushed.
 - [ ] **Backups** — nightly Postgres backups of the Supabase volume, stored off-box.

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Plus, Pencil, X } from "lucide-react";
+import { Plus, Pencil, X, Sparkles, Layers, Clock, Euro } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
+import { StatCard } from "@/components/kit";
 import type { ServiceRow, ProductRow } from "@/lib/gestionale-types";
 
 const empty = { name: "", category: "", duration_min: "45", price_euro: "" };
@@ -38,6 +39,19 @@ export default function ServicesPage() {
   }), [services, q, cat, status]);
   const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 12);
   const activeFilters = (q ? 1 : 0) + (cat ? 1 : 0) + (status !== "active" ? 1 : 0);
+  const summary = useMemo(() => {
+    const active = services.filter((s) => s.active);
+    const priced = active.filter((s) => s.price_cents != null);
+    const avgDur = active.length ? active.reduce((sum, s) => sum + s.duration_min, 0) / active.length : 0;
+    const avgPrice = priced.length ? priced.reduce((sum, s) => sum + (s.price_cents ?? 0), 0) / priced.length : 0;
+    return {
+      active: active.length,
+      categories: new Set(services.map((s) => s.category).filter(Boolean)).size,
+      avgDur,
+      hasPrice: priced.length,
+      avgPrice,
+    };
+  }, [services]);
 
   function openNew() { setForm(empty); setConsumables([]); setEditing("new"); setError(""); }
   async function openEdit(s: ServiceRow) {
@@ -61,6 +75,13 @@ export default function ServicesPage() {
 
   return (
     <AppShell title="Servizi" subtitle="I servizi attivi vengono proposti automaticamente in chat." actions={<Button size="sm" onClick={openNew}><Plus size={15} /> <span className="hidden sm:inline">Aggiungi</span></Button>}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <StatCard icon={Sparkles} value={summary.active} label="Servizi attivi" />
+        <StatCard icon={Layers} value={summary.categories} label="Categorie" />
+        <StatCard icon={Clock} value={summary.active ? `${Math.round(summary.avgDur)}′` : "—"} label="Durata media" />
+        <StatCard icon={Euro} value={summary.hasPrice ? `€ ${Math.round(summary.avgPrice / 100)}` : "—"} label="Prezzo medio" />
+      </div>
+
       <Filters activeCount={activeFilters} onReset={() => { setQ(""); setCat(""); setStatus("active"); }}>
         <FilterField label="Cerca"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome servizio" /></FilterField>
         <FilterField label="Categoria"><Select value={cat} onChange={(e) => setCat(e.target.value)}><option value="">Tutte</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}</Select></FilterField>

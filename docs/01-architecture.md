@@ -98,7 +98,12 @@ Node process** — hence:
 - The webhook route pins `export const runtime = "nodejs"`.
 - Deployment is a long-running `next start` server on **Coolify** (not serverless).
 - **Per-phone serialization** (`runSerial`) is an **in-memory Map**, correct only
-  for a **single instance**. Horizontal scaling would need a shared lock (Redis/DB).
+  for a **single instance**. This is a **deliberate, appropriate tradeoff** for a
+  single-VPS deployment — not a bug. Horizontal scaling (multiple instances behind
+  a load balancer) would silently break per-phone ordering and require replacing
+  the Map with a shared/distributed lock (Redis, Postgres advisory locks) or an
+  ordered stream (e.g. Kafka keyed by phone). **Don't add that until you actually
+  need to scale out** — it's pure overhead for one salon.
 
 ## 6. Security posture
 
@@ -108,10 +113,15 @@ Node process** — hence:
   `/privacy`, `/prenota`, `/api/public/*`, `/api/cron/*`.
 - **Webhook** is signature-verified in production (`WHATSAPP_APP_SECRET`).
 - **Reminders** are guarded by `CRON_SECRET`.
-- **Known gap:** the browser holds the Supabase **anon** key for Realtime. Without
-  **Row-Level Security** enabled on Supabase, that key can read table data directly,
-  bypassing the login gate. Enabling RLS is the top recommended hardening step
-  (see [08-deployment.md](08-deployment.md) §go-live).
+- **RLS (important).** The `/chat` page holds the Supabase **anon** key in the
+  browser for Realtime. With RLS **off**, that key can read/write every table
+  directly (PostgREST + Realtime), bypassing the login gate — anyone can lift it
+  from dev-tools. **`supabase-migration-9.sql` enables RLS on every table**
+  (deny-by-default; the server's `service_role` key bypasses RLS so all `/api/*`
+  routes keep working). After enabling it, browser Realtime stops delivering rows
+  by design; `/chat` falls back to short-interval polling of the authenticated
+  `/api/*` routes. **Run migration 9 before going live** — see
+  [08-deployment.md](08-deployment.md) §go-live.
 
 ## 7. Tech stack (from `package.json`)
 

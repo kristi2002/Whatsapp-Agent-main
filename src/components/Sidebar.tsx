@@ -26,12 +26,12 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="w-60 h-full flex flex-col bd-r" style={{ background: "var(--surface)" }}>
       <div className="flex items-center gap-2.5 h-14 px-5 bd-b shrink-0">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--accent)" }}>
-          <span className="text-sm font-bold" style={{ color: "var(--accent-fg)" }}>M</span>
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-hover))" }}>
+          <span className="text-[12px] font-bold tracking-tight" style={{ color: "#fff" }}>MT</span>
         </div>
         <div className="leading-tight min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: "var(--text)" }}>Max&amp;Tony</p>
-          <p className="text-[10px] text-faint truncate">Nazionale</p>
+          <p className="text-[9px] uppercase tracking-[0.14em] text-faint truncate">Nazionale</p>
         </div>
       </div>
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto thin-scroll">

@@ -25,10 +25,14 @@ const h = vi.hoisted(() => {
 
 const aiMock = vi.fn(async () => "Ciao! Come posso aiutarti?");
 const sendMock = vi.fn(async (_phone: string, _msg: string) => ({ ok: true }));
+const typingMock = vi.fn(async (_id: string) => {});
 
 vi.mock("@/lib/supabase", () => ({ supabase: h.supabase, getSupabase: () => h.supabase }));
 vi.mock("@/lib/ai", () => ({ getAIResponse: (...a: unknown[]) => aiMock(...(a as [])) }));
-vi.mock("@/lib/whatsapp", () => ({ sendWhatsAppMessage: (...a: unknown[]) => sendMock(...(a as [string, string])) }));
+vi.mock("@/lib/whatsapp", () => ({
+  sendWhatsAppMessage: (...a: unknown[]) => sendMock(...(a as [string, string])),
+  sendTypingIndicator: (...a: unknown[]) => typingMock(...(a as [string])),
+}));
 
 import { verifySignature, processEvent, runSerial } from "@/lib/webhook";
 
@@ -56,6 +60,7 @@ beforeEach(() => {
   h.state.queue = [];
   aiMock.mockClear();
   sendMock.mockClear();
+  typingMock.mockClear();
 });
 
 afterEach(() => {
@@ -112,6 +117,8 @@ describe("processEvent", () => {
     await processEvent(textPayload("Ciao"));
     expect(aiMock).toHaveBeenCalledTimes(1);
     expect(sendMock).toHaveBeenCalledWith("393330000000", "Ciao! Come posso aiutarti?");
+    // A typing indicator is fired for the inbound message before the AI runs.
+    expect(typingMock).toHaveBeenCalledWith("wamid.1");
   });
 
   it("does not auto-reply in human mode", async () => {

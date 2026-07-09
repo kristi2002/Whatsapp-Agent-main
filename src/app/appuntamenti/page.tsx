@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { CalendarClock, Hourglass, Check, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Badge, Select } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
+import { StatCard } from "@/components/kit";
 import { DateField } from "@/components/pickers";
 import type { AppointmentWithRelations } from "@/lib/gestionale-types";
 
@@ -49,9 +51,22 @@ export default function AppuntamentiPage() {
   }), [appts, status, op, src]);
   const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 20);
   const activeFilters = (status ? 1 : 0) + (op ? 1 : 0) + (src ? 1 : 0);
+  const summary = useMemo(() => ({
+    total: appts.length,
+    booked: appts.filter((a) => a.status === "booked").length,
+    completed: appts.filter((a) => a.status === "completed").length,
+    cancelled: appts.filter((a) => a.status === "cancelled" || a.status === "no_show").length,
+  }), [appts]);
 
   return (
     <AppShell title="Appuntamenti" subtitle={`${from} → ${to}`}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <StatCard icon={CalendarClock} value={summary.total} label="Totale" accent />
+        <StatCard icon={Hourglass} value={summary.booked} label="Prenotati" />
+        <StatCard icon={Check} value={summary.completed} label="Completati" />
+        <StatCard icon={X} value={summary.cancelled} label="Annullati/Assenti" />
+      </div>
+
       <Filters activeCount={activeFilters} onReset={() => { setStatus(""); setOp(""); setSrc(""); }}>
         <FilterField label="Dal"><DateField value={from} onChange={setFrom} max={to} /></FilterField>
         <FilterField label="Al"><DateField value={to} onChange={setTo} min={from} /></FilterField>

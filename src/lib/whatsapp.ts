@@ -29,3 +29,36 @@ export async function sendWhatsAppMessage(to: string, body: string) {
   }
   return data;
 }
+
+/**
+ * Show a native "typing…" indicator in the customer's chat (and mark their
+ * message read) via Meta's typing-indicator API. It lasts up to 25s or until we
+ * send the reply — whichever comes first — so it covers the latency of the
+ * multi-round AI tool loop without sending a chatty placeholder message.
+ *
+ * Best-effort: never throws. A failure here must not stop us from answering, so
+ * the caller fires it and ignores the result.
+ */
+export async function sendTypingIndicator(messageId: string): Promise<void> {
+  if (!messageId) return;
+  try {
+    await fetch(
+      `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          status: "read",
+          message_id: messageId,
+          typing_indicator: { type: "text" },
+        }),
+      }
+    );
+  } catch (err) {
+    console.error("sendTypingIndicator failed (non-fatal):", err);
+  }
+}

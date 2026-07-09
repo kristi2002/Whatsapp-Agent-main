@@ -2,13 +2,19 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Plus, StickyNote, Star } from "lucide-react";
+import { Plus, StickyNote, Star, Users, Award, UserPlus } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Modal, Field, Input } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
+import { StatCard, Avatar } from "@/components/kit";
 import type { ClientRow } from "@/lib/gestionale-types";
 import { loyaltyTier } from "@/lib/loyalty";
 import { Badge } from "@/components/ui";
+
+const ringFor = (pts: number): "oro" | "platino" | "argento" | null => {
+  const t = loyaltyTier(pts).name;
+  return t === "Oro" ? "oro" : t === "Platino" ? "platino" : t === "Argento" ? "argento" : null;
+};
 
 const initials = (name: string | null, phone: string) => (name ? name.trim().split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() : phone.slice(-2));
 
@@ -34,6 +40,15 @@ export default function ClientiPage() {
   }), [clients, q, onlyNotes, onlyPriority]);
   const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 12);
   const activeFilters = (q ? 1 : 0) + (onlyNotes ? 1 : 0) + (onlyPriority ? 1 : 0);
+  const summary = useMemo(() => {
+    const now = new Date();
+    return {
+      total: clients.length,
+      vip: clients.filter((c) => c.priority).length,
+      withPoints: clients.filter((c) => (c.loyalty_points ?? 0) > 0).length,
+      nuovi: clients.filter((c) => { const d = new Date(c.created_at); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length,
+    };
+  }, [clients]);
 
   async function create() {
     setSaving(true); setError("");
@@ -45,6 +60,13 @@ export default function ClientiPage() {
 
   return (
     <AppShell title="Clienti" subtitle={`${clients.length} clienti`} actions={<Button size="sm" onClick={() => { setForm({ name: "", phone: "", email: "", notes: "" }); setError(""); setAdding(true); }}><Plus size={15} /> <span className="hidden sm:inline">Aggiungi</span></Button>}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <StatCard icon={Users} value={summary.total} label="Clienti totali" />
+        <StatCard icon={Star} value={summary.vip} label="Prioritari (VIP)" />
+        <StatCard icon={Award} value={summary.withPoints} label="Con punti fedeltà" />
+        <StatCard icon={UserPlus} value={summary.nuovi} label="Nuovi questo mese" />
+      </div>
+
       <Filters activeCount={activeFilters} onReset={() => { setQ(""); setOnlyNotes(false); setOnlyPriority(false); }}>
         <FilterField label="Cerca"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome, telefono, email" /></FilterField>
         <label className="flex items-center gap-2 text-sm text-muted self-end"><input type="checkbox" checked={onlyNotes} onChange={(e) => setOnlyNotes(e.target.checked)} style={{ accentColor: "var(--accent)" }} /> Solo con note</label>
@@ -58,7 +80,7 @@ export default function ClientiPage() {
               <Link key={c.id} href={`/clienti/${c.id}`}>
                 <Card className="p-4 h-full transition-transform hover:-translate-y-0.5">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-semibold shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}>{initials(c.name, c.phone)}</div>
+                    <Avatar initials={initials(c.name, c.phone)} size={44} ring={ringFor(c.loyalty_points ?? 0)} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate flex items-center gap-1.5" style={{ color: "var(--text)" }}>{c.priority && <Star size={13} className="shrink-0" style={{ color: "var(--warning)", fill: "var(--warning)" }} />}{c.name || c.phone}</p>
                       <p className="text-xs text-muted truncate">{c.phone}</p>

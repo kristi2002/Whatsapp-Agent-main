@@ -6,7 +6,7 @@
 
 import crypto from "crypto";
 import { supabase } from "@/lib/supabase";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppMessage, sendTypingIndicator } from "@/lib/whatsapp";
 import { getAIResponse } from "@/lib/ai";
 
 /** Verify Meta's X-Hub-Signature-256 header against the raw request body. */
@@ -119,6 +119,11 @@ async function processMessage(value: any, message: any): Promise<void> {
 
   // Human mode — staff will reply from the gestionale; don't auto-answer.
   if (conversation.mode === "human") return;
+
+  // Show a native "typing…" indicator while the AI works through its tool loop
+  // (up to 5 rounds of model + DB calls can take several seconds). Best-effort:
+  // fire-and-forget so it never delays or blocks the actual reply.
+  if (whatsappMsgId) void sendTypingIndicator(whatsappMsgId);
 
   // Conversation history: the MOST RECENT 20 messages, chronological order.
   const { data: recent } = await supabase

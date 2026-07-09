@@ -122,6 +122,9 @@ if scaled horizontally.
   4. Bump `conversation.updated_at`.
   5. **Human mode gate:** if `conversation.mode === "human"`, **return without
      replying** — staff will answer from the dashboard.
+  5b. **Typing indicator:** fire `sendTypingIndicator(whatsappMsgId)`
+     (fire-and-forget) so the customer sees a native "typing…" bubble while the
+     tool loop runs. See §9.1.
   6. **Load history:** the most recent **20** messages, re-ordered chronologically.
   7. Call `getAIResponse(history, ctx)`. Any thrown error → a safe Italian
      fallback message (the customer is *never* left without a reply).
@@ -311,6 +314,19 @@ that is **rebuilt on every turn** so it always contains fresh context:
 - **Sending:** `sendWhatsAppMessage(to, body)` POSTs to
   `https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages` with the access
   token; it **throws on non-2xx** so failures land in the logs.
+
+### 9.1 Typing indicator (keeps the customer engaged during the tool loop)
+The AI can take several seconds when it runs multiple tool rounds
+(check_availability → book_appointment → …). To avoid leaving the customer
+staring at a blank chat, `processMessage` fires
+`sendTypingIndicator(whatsappMsgId)` **before** the AI loop (agent mode, text
+messages only). It calls Meta's typing-indicator API
+(`POST /messages` with `status:"read"`, the inbound `message_id`, and
+`typing_indicator:{type:"text"}`), which shows a native "typing…" bubble for up
+to **25 s or until the reply is sent** — whichever comes first — and also marks
+the customer's message as **read**. It is **best-effort and never throws**, so it
+can't delay or block the actual answer.
+
 - **Two conversation modes** (`conversations.mode`):
   - **`agent`** (default) — the AI auto-replies as above.
   - **`human`** — the webhook stores the inbound message but does **not** run the
@@ -339,6 +355,8 @@ an approved template, not plain text.**
 | Model claims a booking that didn't happen | Blocked by the `finalize()` confirmation gate. |
 | Slot taken between check and insert | DB exclusion constraint → clean "pick another". |
 | Non-text message (voice/image) | One-line "text only" reply (agent mode); AI not run. |
+| AI loop takes several seconds | Native "typing…" indicator shown up front (§9.1); customer isn't left staring at a blank chat. |
+| Typing-indicator API fails | Swallowed (best-effort); the reply is unaffected. |
 | `WHATSAPP_APP_SECRET` unset | Signature check skipped (dev only — set it in prod). |
 | Tool errors internally | Caught; returns a generic error string to the model. |
 

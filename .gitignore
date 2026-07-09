@@ -39,3 +39,6 @@ next-env.d.ts
 
 # local preview artifact
 /favicon_preview.png
+
+# superdesign scratch (design mockups / working dir)
+/.superdesign/

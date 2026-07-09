@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { Euro, CalendarCheck, Receipt, UserPlus } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card } from "@/components/ui";
+import { StatCard } from "@/components/kit";
 
 const TZ = "Europe/Rome";
 const euro = (c: number) => "€" + (c / 100).toFixed(2).replace(".", ",");
@@ -79,14 +80,10 @@ export default function StatistichePage() {
     }>
       {loading || !stats ? <p className="text-sm text-muted">Caricamento…</p> : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            {kpis.map((k) => { const Icon = k.icon; return (
-              <Card key={k.label} className="p-5">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}><Icon size={18} /></div>
-                <p className="text-2xl font-semibold" style={{ color: "var(--text)" }}>{k.value}</p>
-                <p className="text-xs text-muted mt-1">{k.label}</p>
-              </Card>
-            ); })}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            {kpis.map((k) => (
+              <StatCard key={k.label} icon={k.icon} value={k.value} label={k.label} />
+            ))}
           </div>
 
           <Card className="p-5 mb-4">

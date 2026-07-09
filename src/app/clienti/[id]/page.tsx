@@ -6,12 +6,18 @@ import Link from "next/link";
 import { ArrowLeft, Pencil, Trash2, Plus, Minus, Receipt, X, Printer, FlaskConical, ImagePlus, AlertCircle, Copy, Droplet, Star, Award } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
+import { Avatar } from "@/components/kit";
 import { SALON } from "@/lib/salon-config";
 import { DateField } from "@/components/pickers";
 import { loyaltyTier } from "@/lib/loyalty";
 import type { ClientRow, Sale, SaleItem, ColorSession, ColorSessionItem, ProductRow, ServiceRow, AppointmentWithRelations } from "@/lib/gestionale-types";
 
 const TZ = "Europe/Rome";
+const ringFor = (pts: number): "oro" | "platino" | "argento" | null => {
+  const t = loyaltyTier(pts).name;
+  return t === "Oro" ? "oro" : t === "Platino" ? "platino" : t === "Argento" ? "argento" : null;
+};
+const initials = (name: string | null, phone: string) => (name ? name.trim().split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() : phone.slice(-2));
 const euro = (c: number | null) => (c == null ? "—" : "€" + (c / 100).toFixed(2).replace(".", ","));
 const fmtDate = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString("it-IT", { timeZone: TZ, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -123,7 +129,7 @@ export default function ClientDetailPage() {
           <div className="space-y-4">
             <Card className="p-5">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-semibold shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}>{(client.name || client.phone).slice(0, 2).toUpperCase()}</div>
+                <Avatar initials={initials(client.name, client.phone)} size={56} ring={ringFor(client.loyalty_points ?? 0)} />
                 <div className="min-w-0"><p className="text-base font-semibold truncate flex items-center gap-1.5" style={{ color: "var(--text)" }}>{client.priority && <Star size={14} className="shrink-0" style={{ color: "var(--warning)", fill: "var(--warning)" }} />}{client.name || "Senza nome"}</p><p className="text-sm text-muted">{client.phone}</p></div>
               </div>
               {client.email && <p className="text-sm text-muted mb-1">{client.email}</p>}

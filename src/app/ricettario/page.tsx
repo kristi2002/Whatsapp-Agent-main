@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Droplet, Search } from "lucide-react";
+import { Droplet, Search, FlaskConical, Image, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Badge, Input, Select } from "@/components/ui";
 import { Filters, FilterField } from "@/components/data-ui";
+import { StatCard } from "@/components/kit";
 import type { ColorSession, ColorSessionItem } from "@/lib/gestionale-types";
 
 type Row = ColorSession & { items?: ColorSessionItem[]; client?: { id: string; name: string | null; phone: string } | null; stylist?: { name: string } | null };
@@ -34,9 +35,20 @@ export default function RicettarioPage() {
   }, [q, tone, brand, base, technique, serviceType, withPhotos]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
   const activeFilters = [tone, brand, base, technique, serviceType].filter(Boolean).length + (withPhotos ? 1 : 0);
+  const summary = useMemo(() => ({
+    total: rows.length,
+    withPhoto: rows.filter((s) => s.before_photo_url || s.after_photo_url).length,
+    clients: new Set(rows.map((s) => s.client_id)).size,
+  }), [rows]);
 
   return (
     <AppShell title="Ricettario del salone" subtitle="Cerca tra tutte le formule colore realizzate.">
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <StatCard icon={FlaskConical} value={summary.total} label="Schede" accent />
+        <StatCard icon={Image} value={summary.withPhoto} label="Con foto" />
+        <StatCard icon={Users} value={summary.clients} label="Clienti" />
+      </div>
+
       <div className="flex items-center gap-2 h-10 px-3 rounded-xl mb-3" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
         <Search size={16} className="text-faint shrink-0" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca per cliente, risultato, note…" className="flex-1 bg-transparent text-sm outline-none" style={{ color: "var(--text)" }} />

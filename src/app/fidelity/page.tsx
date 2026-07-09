@@ -2,12 +2,20 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Award, Star } from "lucide-react";
+import { Award, Star, Users, Crown } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Badge, Input, Select } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
+import { StatCard, Avatar } from "@/components/kit";
 import { loyaltyTier } from "@/lib/loyalty";
 import type { ClientRow } from "@/lib/gestionale-types";
+
+const ringFor = (pts: number): "oro" | "platino" | "argento" | null => {
+  const t = loyaltyTier(pts).name;
+  return t === "Oro" ? "oro" : t === "Platino" ? "platino" : t === "Argento" ? "argento" : null;
+};
+
+const initials = (name: string | null, phone: string) => (name ? name.trim().split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() : phone.slice(-2));
 
 export default function FidelityPage() {
   const [clients, setClients] = useState<ClientRow[]>([]);
@@ -31,10 +39,10 @@ export default function FidelityPage() {
     <AppShell title="Fedeltà" subtitle="Programma punti: 1 punto per ogni euro speso.">
       {loading ? <p className="text-sm text-muted">Caricamento…</p> : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-            <Card className="p-5"><div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}><Award size={18} /></div><p className="text-2xl font-semibold" style={{ color: "var(--text)" }}>{totalPoints.toLocaleString("it-IT")}</p><p className="text-xs text-muted mt-1">Punti totali emessi</p></Card>
-            <Card className="p-5"><p className="text-2xl font-semibold" style={{ color: "var(--text)" }}>{withPoints}</p><p className="text-xs text-muted mt-1">Clienti con punti</p></Card>
-            <Card className="p-5"><p className="text-2xl font-semibold" style={{ color: "var(--text)" }}>{clients.filter((c) => c.loyalty_points >= 300).length}</p><p className="text-xs text-muted mt-1">Oro e Platino</p></Card>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+            <StatCard icon={Award} value={totalPoints.toLocaleString("it-IT")} label="Punti totali emessi" accent />
+            <StatCard icon={Users} value={withPoints} label="Clienti con punti" />
+            <StatCard icon={Crown} value={clients.filter((c) => c.loyalty_points >= 300).length} label="Oro e Platino" />
           </div>
 
           <Filters activeCount={(q ? 1 : 0) + (tier ? 1 : 0)} onReset={() => { setQ(""); setTier(""); }}>
@@ -48,6 +56,7 @@ export default function FidelityPage() {
               return (
                 <Link key={c.id} href={`/clienti/${c.id}`} className="flex items-center gap-4 px-5 py-3 bd-b last:border-b-0 hover-surface transition-colors">
                   <span className="text-sm text-faint w-6 tabular-nums">{(page - 1) * 15 + i + 1}</span>
+                  <Avatar initials={initials(c.name, c.phone)} size={36} ring={ringFor(c.loyalty_points)} />
                   <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate flex items-center gap-1.5" style={{ color: "var(--text)" }}>{c.priority && <Star size={12} style={{ color: "var(--warning)", fill: "var(--warning)" }} />}{c.name || c.phone}</p><p className="text-xs text-muted truncate">{c.phone}</p></div>
                   <Badge tone={t.tone}>{t.name}</Badge>
                   <span className="text-sm font-semibold tabular-nums w-16 text-right" style={{ color: "var(--text)" }}>{c.loyalty_points} pt</span>

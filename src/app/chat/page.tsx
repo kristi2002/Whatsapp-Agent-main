@@ -32,6 +32,9 @@ export default function ChatPage() {
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ if (selectedId) fetchMessages(selectedId); }, [selectedId, fetchMessages]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // Live updates via Supabase Realtime (push). Requires the browser anon key to
+  // have read access; once RLS is enabled (migration 9) this stops delivering
+  // rows, which is intentional for security — the polling effect below covers it.
   useEffect(() => {
     if (!supabase) return;
     const channel = supabase.channel("realtime-messages")
@@ -44,6 +47,16 @@ export default function ChatPage() {
       .subscribe();
     return () => { supabase?.removeChannel(channel); };
   }, [selectedId, fetchConversations, supabase]);
+
+  // Polling fallback: keeps the chat fresh through the same authenticated /api/*
+  // routes even when Realtime is unavailable (e.g. after RLS locks out the anon
+  // key). ~5s cadence; also refreshes on window focus.
+  useEffect(() => {
+    const tick = () => { fetchConversations(); if (selectedId) fetchMessages(selectedId); };
+    const id = setInterval(tick, 5000);
+    window.addEventListener("focus", tick);
+    return () => { clearInterval(id); window.removeEventListener("focus", tick); };
+  }, [selectedId, fetchConversations, fetchMessages]);
 
   async function toggleMode() {
     if (!selected) return;

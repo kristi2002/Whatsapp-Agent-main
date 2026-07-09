@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, Trash2, Plus, CalendarOff } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input } from "@/components/ui";
+import { Avatar } from "@/components/kit";
 import type { AppointmentWithRelations, ServiceRow } from "@/lib/gestionale-types";
 import type { BusinessHours } from "@/lib/types";
 import { DateField, TimeField } from "@/components/pickers";
@@ -110,7 +111,7 @@ export default function StaffDetailPage() {
           <div className="grid lg:grid-cols-3 gap-4">
             <Card className="p-5">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-semibold shrink-0" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}>{stylist.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}</div>
+                <Avatar initials={stylist.name.split(" ").map((w) => w[0]).slice(0, 2).join("")} size={56} />
                 <div><p className="text-base font-semibold" style={{ color: "var(--text)" }}>{stylist.name}</p><Badge tone={stylist.active ? "success" : "neutral"}>{stylist.active ? "Attivo" : "Disattivato"}</Badge></div>
               </div>
               <p className="text-xs uppercase tracking-wide text-faint mb-2">Servizi eseguiti</p>

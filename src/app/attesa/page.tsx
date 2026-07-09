@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Plus, Trash2, MessageCircle, Check } from "lucide-react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { Plus, Trash2, MessageCircle, Check, Hourglass, Phone, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Button, Badge, Modal, Field, Input, Select } from "@/components/ui";
+import { StatCard } from "@/components/kit";
 import { DateField } from "@/components/pickers";
 import { SALON } from "@/lib/salon-config";
 import type { ServiceRow } from "@/lib/gestionale-types";
@@ -33,12 +34,24 @@ export default function AttesaPage() {
     if (!res.ok) { setErr((await res.json()).error || "Errore."); return; }
     setOpen(false); setForm({ name: "", phone: "", service_id: "", preferred_date: "", notes: "" }); load();
   }
+  const summary = useMemo(() => ({
+    total: rows.length,
+    attesa: rows.filter((w) => w.status === "attesa").length,
+    contattato: rows.filter((w) => w.status === "contattato").length,
+  }), [rows]);
+
   async function mark(id: string, status: string) { await fetch(`/api/waitlist/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }); load(); }
   async function del(id: string) { await fetch(`/api/waitlist/${id}`, { method: "DELETE" }); load(); }
   function waLink(w: WL) { const msg = encodeURIComponent(`Ciao${w.name ? " " + w.name : ""}! Si è liberato un posto da ${SALON.name}. Ti interessa ancora un appuntamento? Fammi sapere.`); return `https://wa.me/${w.phone.replace(/[^0-9]/g, "")}?text=${msg}`; }
 
   return (
     <AppShell title="Lista d'attesa" subtitle="Clienti da richiamare quando si libera un posto." actions={<Button size="sm" onClick={() => { setForm({ name: "", phone: "", service_id: "", preferred_date: "", notes: "" }); setErr(""); setOpen(true); }}><Plus size={15} /> <span className="hidden sm:inline">Aggiungi</span></Button>}>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <StatCard icon={Hourglass} value={summary.attesa} label="In attesa" accent />
+        <StatCard icon={Phone} value={summary.contattato} label="Contattati" />
+        <StatCard icon={Users} value={summary.total} label="Totale" />
+      </div>
+
       {loading ? <p className="text-sm text-muted">Caricamento…</p> : rows.length === 0 ? <p className="text-sm text-faint py-8 text-center">Nessuno in lista d&apos;attesa.</p> : (
         <div className="space-y-2">
           {rows.map((w) => (

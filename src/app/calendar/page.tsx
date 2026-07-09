@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, FlaskConical } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, FlaskConical, CalendarDays, Check, Clock, Euro } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Button, Modal, Field, Input, Select, Badge } from "@/components/ui";
 import { Filters, FilterField } from "@/components/data-ui";
+import { StatCard } from "@/components/kit";
 import { DateField, TimeField } from "@/components/pickers";
 import type { AppointmentWithRelations, ServiceRow } from "@/lib/gestionale-types";
 
@@ -66,6 +67,15 @@ export default function CalendarPage() {
     });
   }, []);
 
+  const daySummary = useMemo(() => {
+    const list = appts.filter((a) => a.status !== "cancelled");
+    const completati = list.filter((a) => a.status === "completed").length;
+    const rimanenti = list.filter((a) => a.status === "booked").length;
+    const incassoCents = list
+      .filter((a) => a.status === "booked" || a.status === "completed")
+      .reduce((s, a) => s + (a.service?.price_cents ?? 0), 0);
+    return { total: list.length, completati, rimanenti, incasso: `€ ${Math.round(incassoCents / 100)}` };
+  }, [appts]);
   const shown = useMemo(() => (stylistFilter ? stylists.filter((s) => s.id === stylistFilter) : stylists), [stylists, stylistFilter]);
   const hours = useMemo(() => Array.from({ length: Math.max(1, hEnd - hStart) }, (_, i) => hStart + i), [hStart, hEnd]);
   const nowMin = localMinutes(new Date().toISOString());
@@ -111,6 +121,13 @@ export default function CalendarPage() {
         <button onClick={() => setDate(todayLocal())} className="h-9 px-3 rounded-lg text-xs font-medium text-muted hover-surface" style={{ border: "1px solid var(--border)" }}>Oggi</button>
         <div className="w-44"><DateField value={date} onChange={setDate} /></div>
         <span className="text-sm text-muted ml-1 capitalize hidden md:block">{prettyDate(date)}</span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <StatCard icon={CalendarDays} value={daySummary.total} label="Appuntamenti oggi" accent />
+        <StatCard icon={Check} value={daySummary.completati} label="Completati" />
+        <StatCard icon={Clock} value={daySummary.rimanenti} label="Rimanenti" />
+        <StatCard icon={Euro} value={daySummary.incasso} label="Incasso previsto" />
       </div>
 
       <Filters activeCount={activeFilters} onReset={() => { setStylistFilter(""); setHStart(8); setHEnd(20); }}>
