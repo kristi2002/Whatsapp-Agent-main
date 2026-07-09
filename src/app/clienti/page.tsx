@@ -17,6 +17,7 @@ const ringFor = (pts: number): "oro" | "platino" | "argento" | null => {
 };
 
 const initials = (name: string | null, phone: string) => (name ? name.trim().split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase() : phone.slice(-2));
+const fmtVisit = (iso: string) => new Date(iso).toLocaleDateString("it-IT", { timeZone: "Europe/Rome", day: "numeric", month: "short" });
 
 export default function ClientiPage() {
   const [clients, setClients] = useState<ClientRow[]>([]);
@@ -84,6 +85,7 @@ export default function ClientiPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate flex items-center gap-1.5" style={{ color: "var(--text)" }}>{c.priority && <Star size={13} className="shrink-0" style={{ color: "var(--warning)", fill: "var(--warning)" }} />}{c.name || c.phone}</p>
                       <p className="text-xs text-muted truncate">{c.phone}</p>
+                      <p className="text-[11px] text-faint truncate mt-0.5">{c.last_visit ? `Ultima visita: ${fmtVisit(c.last_visit)}` : "Nessuna visita"}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <Badge tone={loyaltyTier(c.loyalty_points).tone}>{c.loyalty_points} pt</Badge>

@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { CalendarDays, CalendarClock, Sparkles, Users, ArrowRight, Bot, User, MessageSquare, Plus } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Badge } from "@/components/ui";
+import { Delta } from "@/components/kit";
 import type { OverviewStats, AppointmentWithRelations } from "@/lib/gestionale-types";
 import type { ConversationWithLastMessage } from "@/lib/types";
 
@@ -84,12 +85,15 @@ export default function OverviewPage() {
             {KPIS.map((k, i) => {
               const Icon = k.icon;
               const value = (stats as unknown as Record<string, number>)?.[k.key] ?? 0;
+              const delta = k.key === "todayCount" ? stats?.deltas?.today : k.key === "upcomingCount" ? stats?.deltas?.upcoming : undefined;
+              const deltaTitle = k.key === "todayCount" ? "vs stesso giorno la settimana scorsa" : "vs 7 giorni precedenti";
               return (
                 <motion.div key={k.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                   <Link href={k.href}>
                     <Card className="p-5 h-full transition-transform hover:-translate-y-0.5">
                       <div className="flex items-center justify-between mb-3">
                         <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}><Icon size={18} /></div>
+                        {delta !== undefined && <Delta value={delta} title={deltaTitle} />}
                       </div>
                       <p className="text-3xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>{value}</p>
                       <p className="text-xs text-muted mt-1">{k.label}</p>

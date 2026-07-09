@@ -9,7 +9,21 @@ export async function GET(request: NextRequest) {
   }
   const { data, error } = await supabase.from("clients").select("*").order("priority", { ascending: false }).order("name", { nullsFirst: false });
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json(data);
+
+  // Attach each client's most recent past visit (one extra query, mapped by phone).
+  const nowIso = new Date().toISOString();
+  const { data: past } = await supabase
+    .from("appointments")
+    .select("customer_phone, starts_at")
+    .in("status", ["booked", "completed"])
+    .lte("starts_at", nowIso)
+    .order("starts_at", { ascending: false });
+  const lastByPhone = new Map<string, string>();
+  for (const a of past ?? []) {
+    if (a.customer_phone && !lastByPhone.has(a.customer_phone)) lastByPhone.set(a.customer_phone, a.starts_at);
+  }
+  const withVisit = (data ?? []).map((c) => ({ ...c, last_visit: lastByPhone.get(c.phone) ?? null }));
+  return Response.json(withVisit);
 }
 
 export async function POST(request: NextRequest) {

@@ -1,7 +1,31 @@
 "use client";
 
 import * as React from "react";
-import type { LucideIcon } from "lucide-react";
+import { ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
+
+/**
+ * Trend pill for a period-over-period change. GREEN up / RED down / muted flat.
+ * `value` is a REAL delta computed from data — never a placeholder. Pass `title`
+ * for the comparison context ("vs settimana scorsa").
+ */
+export function Delta({ value, title }: { value: number; title?: string }) {
+  const tone =
+    value > 0
+      ? { bg: "var(--success-soft)", fg: "var(--success)" }
+      : value < 0
+      ? { bg: "var(--danger-soft)", fg: "var(--danger)" }
+      : { bg: "var(--surface-2)", fg: "var(--text-muted)" };
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full tabular-nums"
+      style={{ background: tone.bg, color: tone.fg }}
+    >
+      {value > 0 ? <ArrowUp size={11} /> : value < 0 ? <ArrowDown size={11} /> : null}
+      {value > 0 ? `+${value}` : value < 0 ? value : "—"}
+    </span>
+  );
+}
 
 /**
  * Summary "stat" card used in the strips at the top of the dashboard pages

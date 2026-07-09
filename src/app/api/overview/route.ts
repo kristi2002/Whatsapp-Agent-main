@@ -11,14 +11,21 @@ export async function GET() {
   const dayStart = zonedWallTimeToUtc(p.year, p.month, p.day, 0, 0, SALON.timezone);
   const nextDay = zonedWallTimeToUtc(p.year, p.month, p.day + 1, 0, 0, SALON.timezone);
   const in7 = zonedWallTimeToUtc(p.year, p.month, p.day + 7, 0, 0, SALON.timezone);
+  // Prior-period windows for real trend deltas.
+  const weekAgoStart = zonedWallTimeToUtc(p.year, p.month, p.day - 7, 0, 0, SALON.timezone); // same weekday, last week (00:00)
+  const weekAgoNextDay = zonedWallTimeToUtc(p.year, p.month, p.day - 6, 0, 0, SALON.timezone);
 
-  const [today, weekRows, upcoming, services, stylists, convos] = await Promise.all([
+  const [today, weekRows, upcoming, services, stylists, convos, todayLastWeek, prev7] = await Promise.all([
     supabase.from("appointments").select(SELECT).in("status", ["booked", "completed"]).gte("starts_at", dayStart.toISOString()).lt("starts_at", nextDay.toISOString()).order("starts_at"),
     supabase.from("appointments").select("starts_at").in("status", ["booked", "completed"]).gte("starts_at", dayStart.toISOString()).lt("starts_at", in7.toISOString()),
     supabase.from("appointments").select("id", { count: "exact", head: true }).eq("status", "booked").gte("starts_at", now.toISOString()).lt("starts_at", in7.toISOString()),
     supabase.from("services").select("id", { count: "exact", head: true }).eq("active", true),
     supabase.from("stylists").select("id", { count: "exact", head: true }).eq("active", true),
     supabase.from("conversations").select("id", { count: "exact", head: true }),
+    // Same weekday last week (for the "appuntamenti oggi" delta).
+    supabase.from("appointments").select("id", { count: "exact", head: true }).in("status", ["booked", "completed"]).gte("starts_at", weekAgoStart.toISOString()).lt("starts_at", weekAgoNextDay.toISOString()),
+    // The previous 7 days (for the "prossimi 7 giorni" volume delta).
+    supabase.from("appointments").select("id", { count: "exact", head: true }).in("status", ["booked", "completed"]).gte("starts_at", weekAgoStart.toISOString()).lt("starts_at", dayStart.toISOString()),
   ]);
 
   // Build 7-day series (local dates).
@@ -35,13 +42,21 @@ export async function GET() {
     week.push({ date: s.toISOString(), label: dayNames[parts.weekday], count });
   }
 
+  const todayCount = today.data?.length ?? 0;
+  const upcomingCount = upcoming.count ?? 0;
+
   return Response.json({
-    todayCount: today.data?.length ?? 0,
-    upcomingCount: upcoming.count ?? 0,
+    todayCount,
+    upcomingCount,
     activeServices: services.count ?? 0,
     activeStylists: stylists.count ?? 0,
     conversations: convos.count ?? 0,
     today: today.data ?? [],
     week,
+    // Real period-over-period deltas (absolute counts).
+    deltas: {
+      today: todayCount - (todayLastWeek.count ?? 0),      // vs same weekday last week
+      upcoming: upcomingCount - (prev7.count ?? 0),        // vs the previous 7 days
+    },
   });
 }

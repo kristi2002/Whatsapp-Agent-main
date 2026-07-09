@@ -19,6 +19,8 @@ export interface OverviewStats {
   activeStylists: number;
   conversations: number;
   today: AppointmentWithRelations[];
+  /** Real period-over-period deltas (absolute counts). */
+  deltas?: { today: number; upcoming: number };
 }
 
 export interface ProductRow {
@@ -50,6 +52,8 @@ export interface ClientRow {
   loyalty_points: number;
   created_at: string;
   updated_at: string;
+  /** Most recent past appointment (booked/completed), attached by GET /api/clients list. */
+  last_visit?: string | null;
 }
 
 export interface ColorSessionItem {
