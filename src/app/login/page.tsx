@@ -2,6 +2,9 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { MessageSquare, CalendarDays, ShieldCheck } from "lucide-react";
+import { Button, Input } from "@/components/ui";
 
 function LoginForm() {
   const router = useRouter();
@@ -37,41 +40,32 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm bg-white rounded-2xl shadow-sm p-8 space-y-5"
-      >
-        <div className="text-center space-y-1">
-          <h1 className="text-xl font-semibold text-gray-900">Max&amp;Tony Nazionale</h1>
-          <p className="text-sm text-gray-500">Accesso staff</p>
+    <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: "var(--bg)" }}>
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center text-center mb-6">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-hover))" }}>
+            <span className="text-base font-bold tracking-tight" style={{ color: "#fff" }}>MT</span>
+          </div>
+          <h1 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Max&amp;Tony Nazionale</h1>
+          <p className="text-xs text-muted mt-0.5">Gestionale · Accesso staff</p>
         </div>
 
-        <div className="space-y-1">
-          <label htmlFor="password" className="text-sm font-medium text-gray-700">
-            Password
+        <form onSubmit={handleSubmit} className="card p-6 space-y-4" style={{ boxShadow: "var(--shadow)" }}>
+          <label className="block">
+            <span className="block text-xs text-muted mb-1.5">Password</span>
+            <Input id="password" type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
           </label>
-          <input
-            id="password"
-            type="password"
-            autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder="••••••••"
-          />
+          {error && <p className="text-xs" style={{ color: "var(--danger)" }}>{error}</p>}
+          <Button type="submit" className="w-full" disabled={loading || !password}>{loading ? "Accesso…" : "Entra"}</Button>
+          <p className="flex items-center justify-center gap-1.5 text-[11px] text-faint pt-1"><ShieldCheck size={12} /> Accesso riservato allo staff del salone</p>
+        </form>
+
+        <div className="flex items-center justify-center gap-5 mt-5 text-xs">
+          <Link href="/prenota" className="inline-flex items-center gap-1.5 text-muted hover:text-accent transition-colors"><CalendarDays size={13} /> Prenota online</Link>
+          <span className="text-faint">·</span>
+          <Link href="/privacy" className="inline-flex items-center gap-1.5 text-muted hover:text-accent transition-colors"><MessageSquare size={13} /> Privacy</Link>
         </div>
-
-        {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={loading || !password}
-          className="w-full rounded-lg bg-emerald-600 py-2 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
-        >
-          {loading ? "Accesso…" : "Entra"}
-        </button>
-      </form>
+      </div>
     </div>
   );
 }

@@ -57,7 +57,7 @@ export default function PrenotaPage() {
     <div className="min-h-screen flex flex-col items-center px-4 py-8" style={{ background: "var(--bg)" }}>
       <div className="w-full max-w-lg">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center mb-2" style={{ background: "var(--accent)" }}><span className="text-lg font-bold" style={{ color: "var(--accent-fg)" }}>M</span></div>
+          <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center mb-2" style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-hover))" }}><span className="text-base font-bold tracking-tight" style={{ color: "#fff" }}>MT</span></div>
           <h1 className="text-lg font-semibold" style={{ color: "var(--text)" }}>{salon?.name ?? "Prenota online"}</h1>
           {salon && <p className="text-xs text-muted">{salon.address}</p>}
         </div>
@@ -71,6 +71,10 @@ export default function PrenotaPage() {
           </div>
         ) : (
           <div className="card p-5 sm:p-6" style={{ boxShadow: "var(--shadow)" }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>{steps[step]}</span>
+              <span className="text-[11px] text-faint">Passo {step + 1} di {steps.length}</span>
+            </div>
             <div className="flex items-center gap-1.5 mb-5">
               {steps.map((s, i) => (<div key={s} className="flex-1 h-1 rounded-full" style={{ background: i <= step ? "var(--accent)" : "var(--surface-2)" }} />))}
             </div>
@@ -132,7 +136,11 @@ export default function PrenotaPage() {
             )}
           </div>
         )}
-        <p className="text-center text-[11px] text-faint mt-4">{salon?.phone}</p>
+        <div className="text-center mt-5 space-y-0.5">
+          {salon?.address && <p className="text-[11px] text-faint">{salon.address}</p>}
+          {salon?.phone && <p className="text-[11px] text-faint">{salon.phone}</p>}
+          <p className="text-[11px] text-faint">Prenotazione online · gestita dal nostro assistente WhatsApp</p>
+        </div>
       </div>
     </div>
   );

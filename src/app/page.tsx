@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { CalendarDays, CalendarClock, Sparkles, Users, ArrowRight, Bot, User, MessageSquare } from "lucide-react";
+import { CalendarDays, CalendarClock, Sparkles, Users, ArrowRight, Bot, User, MessageSquare, Plus } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Badge } from "@/components/ui";
 import type { OverviewStats, AppointmentWithRelations } from "@/lib/gestionale-types";
@@ -54,6 +54,8 @@ export default function OverviewPage() {
   const week = stats?.week ?? [];
   const maxWeek = Math.max(1, ...week.map((w) => w.count));
   const subtitle = new Date().toLocaleDateString("it-IT", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
+  const hour = Number(new Intl.DateTimeFormat("it-IT", { timeZone: TZ, hour: "2-digit", hour12: false }).format(new Date()));
+  const greeting = hour < 13 ? "Buongiorno" : hour < 18 ? "Buon pomeriggio" : "Buonasera";
 
   return (
     <AppShell title="Panoramica" subtitle={subtitle.charAt(0).toUpperCase() + subtitle.slice(1)}>
@@ -61,6 +63,23 @@ export default function OverviewPage() {
         <p className="text-sm text-muted">Caricamento…</p>
       ) : (
         <>
+          <div className="flex items-end justify-between gap-4 flex-wrap mb-5">
+            <div>
+              <h2 className="text-xl font-semibold" style={{ color: "var(--text)" }}>{greeting}</h2>
+              <p className="text-sm text-muted mt-0.5">
+                <span className="tabular-nums">{stats?.todayCount ?? 0}</span> appuntamenti oggi · <span className="tabular-nums">{stats?.conversations ?? 0}</span> conversazioni
+              </p>
+            </div>
+            <div className="flex gap-2.5">
+              <Link href="/chat" className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium transition-colors hover-surface" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }}>
+                <MessageSquare size={15} /> <span className="hidden sm:inline">Apri conversazioni</span>
+              </Link>
+              <Link href="/calendar" className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium transition-opacity hover:opacity-90" style={{ background: "var(--accent)", color: "var(--accent-fg)" }}>
+                <Plus size={15} /> <span className="hidden sm:inline">Nuovo appuntamento</span><span className="sm:hidden">Nuovo</span>
+              </Link>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {KPIS.map((k, i) => {
               const Icon = k.icon;
