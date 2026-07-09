@@ -19,8 +19,8 @@ export interface OverviewStats {
   activeStylists: number;
   conversations: number;
   today: AppointmentWithRelations[];
-  /** Real period-over-period deltas (absolute counts). */
-  deltas?: { today: number; upcoming: number };
+  /** Real period-over-period deltas as percentage change; null = no prior-period base. */
+  deltas?: { today: number | null; upcoming: number | null };
 }
 
 export interface ProductRow {

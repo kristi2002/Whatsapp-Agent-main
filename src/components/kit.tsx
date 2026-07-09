@@ -4,9 +4,10 @@ import * as React from "react";
 import { ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 
 /**
- * Trend pill for a period-over-period change. GREEN up / RED down / muted flat.
- * `value` is a REAL delta computed from data — never a placeholder. Pass `title`
- * for the comparison context ("vs settimana scorsa").
+ * Trend pill for a period-over-period PERCENTAGE change. GREEN up / RED down /
+ * muted flat. `value` is a REAL delta computed from data — never a placeholder.
+ * Callers should omit the pill entirely when there is no prior-period base
+ * (value would be null). Pass `title` for the comparison context.
  */
 export function Delta({ value, title }: { value: number; title?: string }) {
   const tone =
@@ -22,7 +23,7 @@ export function Delta({ value, title }: { value: number; title?: string }) {
       style={{ background: tone.bg, color: tone.fg }}
     >
       {value > 0 ? <ArrowUp size={11} /> : value < 0 ? <ArrowDown size={11} /> : null}
-      {value > 0 ? `+${value}` : value < 0 ? value : "—"}
+      {value > 0 ? `+${value}%` : value < 0 ? `${value}%` : "—"}
     </span>
   );
 }

@@ -45,6 +45,11 @@ export async function GET() {
   const todayCount = today.data?.length ?? 0;
   const upcomingCount = upcoming.count ?? 0;
 
+  // Percentage change vs the prior period. null when the prior period was 0
+  // (a percentage has no meaning against a zero base) — the UI omits the pill.
+  const pct = (curr: number, prev: number): number | null =>
+    prev === 0 ? null : Math.round(((curr - prev) / prev) * 100);
+
   return Response.json({
     todayCount,
     upcomingCount,
@@ -53,10 +58,10 @@ export async function GET() {
     conversations: convos.count ?? 0,
     today: today.data ?? [],
     week,
-    // Real period-over-period deltas (absolute counts).
+    // Real period-over-period deltas (percentage change).
     deltas: {
-      today: todayCount - (todayLastWeek.count ?? 0),      // vs same weekday last week
-      upcoming: upcomingCount - (prev7.count ?? 0),        // vs the previous 7 days
+      today: pct(todayCount, todayLastWeek.count ?? 0),    // vs same weekday last week
+      upcoming: pct(upcomingCount, prev7.count ?? 0),      // vs the previous 7 days
     },
   });
 }

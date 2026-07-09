@@ -93,7 +93,7 @@ export default function OverviewPage() {
                     <Card className="p-5 h-full transition-transform hover:-translate-y-0.5">
                       <div className="flex items-center justify-between mb-3">
                         <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "var(--accent-soft)", color: "var(--accent-soft-fg)" }}><Icon size={18} /></div>
-                        {delta !== undefined && <Delta value={delta} title={deltaTitle} />}
+                        {delta != null && <Delta value={delta} title={deltaTitle} />}
                       </div>
                       <p className="text-3xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>{value}</p>
                       <p className="text-xs text-muted mt-1">{k.label}</p>
