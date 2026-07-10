@@ -20,6 +20,12 @@
 | **How to resume** | Read this file top-to-bottom; the phase sections (§1–§4) each say *what/why/files/tests*. To re-verify: `npm test`, or run the app and send two quick WhatsApp messages that together form one booking → expect a single clean reply. |
 
 ### Change log (append future rounds here)
+- **2026-07-10 (UI)** — "Svuota chat" now opens a **centered themed confirmation
+  modal** (reusing the app's Radix `Modal` + `Button`, danger styling) instead of
+  the native `window.confirm`/`alert`. Audited dropdowns: all date/time pickers
+  use the themed `DateField`/`TimeField` (no native `type="date"` inputs); native
+  `<select>` triggers are themed but their open option lists remain OS-rendered
+  (would need a custom Radix Select to fully theme — not done).
 - **2026-07-10** — Initial hardening round (Phases 1–4). This document created;
   `docs/02`, `05`, `07`, `README` updated. Committed `2fcb098`, pushed to `main`.
 - **2026-07-10 (follow-up)** — **Service is never assumed.** The agent was

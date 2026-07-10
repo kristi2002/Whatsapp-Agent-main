@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { Send, Bot, User, ArrowLeft, Search, Trash2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import { Badge } from "@/components/ui";
+import { Badge, Modal, Button } from "@/components/ui";
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
 
 const fmtTime = (d: string) => new Date(d).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
@@ -22,6 +22,8 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [q, setQ] = useState("");
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Whether the message list is scrolled (near) the bottom. Drives auto-scroll:
@@ -90,9 +92,11 @@ export default function ChatPage() {
 
   async function handleClear() {
     if (!selectedId) return;
-    if (!window.confirm("Svuotare questa chat? Tutti i messaggi verranno eliminati definitivamente.")) return;
+    setClearing(true);
     const res = await fetch(`/api/conversations/${selectedId}/messages`, { method: "DELETE" });
-    if (!res.ok) { window.alert("Non è stato possibile svuotare la chat. Riprova."); return; }
+    setClearing(false);
+    setClearOpen(false);
+    if (!res.ok) return;
     setMessages([]);
     fetchConversations();
   }
@@ -148,7 +152,7 @@ export default function ChatPage() {
                 <button onClick={toggleMode} className="flex items-center gap-2 h-8 px-3 rounded-lg text-xs font-medium shrink-0" style={{ background: selected.mode === "agent" ? "var(--success-soft)" : "var(--warning-soft)", color: selected.mode === "agent" ? "var(--success)" : "var(--warning)" }}>
                   {selected.mode === "agent" ? <Bot size={14} /> : <User size={14} />}<span className="hidden sm:inline">{selected.mode === "agent" ? "Assistente AI" : "Manuale"}</span>
                 </button>
-                <button onClick={handleClear} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover-surface shrink-0" style={{ border: "1px solid var(--border)" }} aria-label="Svuota chat" title="Svuota chat">
+                <button onClick={() => setClearOpen(true)} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover-surface shrink-0" style={{ border: "1px solid var(--border)" }} aria-label="Svuota chat" title="Svuota chat">
                   <Trash2 size={15} />
                 </button>
               </div>
@@ -181,6 +185,26 @@ export default function ChatPage() {
           )}
         </div>
       </div>
+
+      <Modal
+        open={clearOpen}
+        onClose={() => !clearing && setClearOpen(false)}
+        title="Svuota chat"
+        subtitle={selected ? (selected.name || selected.phone) : undefined}
+      >
+        <div className="flex items-start gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--danger-soft)", color: "var(--danger)" }}>
+            <Trash2 size={18} />
+          </div>
+          <p className="text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
+            Tutti i messaggi di questa conversazione verranno <strong style={{ color: "var(--text)" }}>eliminati definitivamente</strong>. La conversazione resterà comunque nella lista.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setClearOpen(false)} disabled={clearing}>Annulla</Button>
+          <Button variant="danger" size="sm" onClick={handleClear} disabled={clearing}>{clearing ? "Elimino…" : "Svuota chat"}</Button>
+        </div>
+      </Modal>
     </AppShell>
   );
 }
