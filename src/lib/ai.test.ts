@@ -183,6 +183,39 @@ describe("getAIResponse", () => {
     expect(reply).toBe("Prenotazione confermata! A domani 😊");
   });
 
+  it("blocks a FALSE reschedule confirmation when reschedule_appointment failed", async () => {
+    createMock
+      .mockResolvedValueOnce({ choices: [{ message: { content: null, tool_calls: [
+        { id: "r1", type: "function", function: { name: "reschedule_appointment", arguments: "{}" } },
+      ] } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: "Perfetto! Ho spostato il tuo appuntamento a giovedì. 😊", tool_calls: [] } }] });
+    executeToolMock.mockImplementationOnce(async (...a: unknown[]) => {
+      const track = a[3] as (o: { name: string; ok: boolean; message: string }) => void;
+      track?.({ name: "reschedule_appointment", ok: false, message: "Hai più appuntamenti futuri. Quale vuoi spostare?" });
+      return "Hai più appuntamenti futuri. Quale vuoi spostare?";
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "spostalo a giovedì alle 14" }], ctx);
+    // The false "Ho spostato" is replaced with the real tool failure.
+    expect(reply).toBe("Hai più appuntamenti futuri. Quale vuoi spostare?");
+  });
+
+  it("allows a reschedule confirmation when reschedule_appointment succeeded", async () => {
+    createMock
+      .mockResolvedValueOnce({ choices: [{ message: { content: null, tool_calls: [
+        { id: "r1", type: "function", function: { name: "reschedule_appointment", arguments: "{}" } },
+      ] } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: "Perfetto! Ho spostato il tuo appuntamento a giovedì alle 14:00.", tool_calls: [] } }] });
+    executeToolMock.mockImplementationOnce(async (...a: unknown[]) => {
+      const track = a[3] as (o: { name: string; ok: boolean; message: string }) => void;
+      track?.({ name: "reschedule_appointment", ok: true, message: "Appuntamento spostato a giovedì 16 luglio 14:00." });
+      return "Appuntamento spostato a giovedì 16 luglio 14:00.";
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "alle 14" }], ctx);
+    expect(reply).toContain("Ho spostato");
+  });
+
   it("blocks a confirmation when no tool ran this turn AND no recent booking exists in the DB", async () => {
     hasRecentBookingMock.mockResolvedValue(false);
     // Model claims a booking with no tool call at all (pure hallucination).

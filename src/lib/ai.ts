@@ -77,10 +77,12 @@ export async function getAIResponse(
   const SERVICES_PROMISE_RE =
     /(ecco|questi sono|ti (elenco|mostro)|di seguito|trovi qui)[^.!?\n]{0,25}\bserviz/i;
 
-  // A reply that claims a NEW booking was just made (not a reschedule, which
-  // says "spostato", nor a listing from get_my_appointments).
+  // A reply that claims a NEW booking was just made.
   const CONFIRMATION_RE =
     /prenotazione\s+conferm|ho\s+prenotat|appuntamento[^.!?\n]{0,30}(?:conferm|prenotat)|ti\s+ho\s+(?:prenotat|fissat)|fissat\w*\s+l['’]appuntamento/i;
+  // A reply that claims an EXISTING appointment was MOVED (reschedule). Guarded
+  // the same way so a failed reschedule can't be falsely confirmed as done.
+  const RESCHEDULE_RE = /\bspostat[oaie]\b/i;
 
   /**
    * Final safety gate: if the model claims a fresh booking but no booking
@@ -90,19 +92,18 @@ export async function getAIResponse(
    */
   const finalize = async (text: string | null | undefined): Promise<string> => {
     const reply = text || "Scusa, non sono riuscito a rispondere. Riprova.";
-    if (!bookingOk && CONFIRMATION_RE.test(reply)) {
-      // The model claims a fresh booking but no booking tool succeeded THIS turn.
-      // Before overriding with a failure, check the DB: the booking may have
-      // completed in a PREVIOUS turn (classic case: the customer split the
-      // request across two messages, so this turn only echoes the confirmation).
-      // If a matching recent booking exists, the confirmation is real — allow it.
-      if (!bookingFailed) {
+    const claimsBooking = CONFIRMATION_RE.test(reply);
+    const claimsReschedule = RESCHEDULE_RE.test(reply);
+    if (!bookingOk && (claimsBooking || claimsReschedule)) {
+      // A NEW-booking claim may be legitimate even with no tool this turn: the
+      // customer can split the request across messages, so the booking completed
+      // in a PREVIOUS turn and this turn only echoes it. Allow it if the DB shows
+      // a matching recent booking. Reschedules complete in a single turn, so we
+      // do NOT grant that exception — a claimed move must have persisted now.
+      if (claimsBooking && !claimsReschedule && !bookingFailed) {
         try {
           if (await hasRecentBooking(ctx.customerPhone, ctx.now)) {
-            console.log(
-              `${logPrefix} confirmation allowed: a recent booking for this phone ` +
-                `exists in the DB (likely completed in a previous turn).`
-            );
+            console.log(`${logPrefix} confirmation allowed: a recent booking exists in the DB (previous turn).`);
             return reply;
           }
         } catch (err) {
@@ -110,15 +111,15 @@ export async function getAIResponse(
         }
       }
       console.warn(
-        `${logPrefix} BLOCKED a booking confirmation with no successful booking ` +
+        `${logPrefix} BLOCKED an unbacked ${claimsReschedule ? "reschedule" : "booking"} confirmation ` +
           `(bookingFailed=${bookingFailed}). Model said: ${reply.slice(0, 160)}`
       );
-      return (
-        lastFailureMsg ||
-        "Scusa, non sono riuscito a completare la prenotazione in questo momento. " +
-          "Puoi ripetermi servizio, giorno e orario così ricontrollo la disponibilità? " +
-          "In alternativa puoi chiamare il salone."
-      );
+      if (lastFailureMsg) return lastFailureMsg;
+      return claimsReschedule
+        ? "Scusa, non sono riuscito a spostare l'appuntamento in questo momento. Dimmi di nuovo quale appuntamento e il nuovo giorno/orario, così riprovo. In alternativa puoi chiamare il salone."
+        : "Scusa, non sono riuscito a completare la prenotazione in questo momento. " +
+            "Puoi ripetermi servizio, giorno e orario così ricontrollo la disponibilità? " +
+            "In alternativa puoi chiamare il salone.";
     }
     // Safety net: if the model TELLS the customer it handed off to a human but
     // never called escalate_to_human, make the claim true (flip to human + alert

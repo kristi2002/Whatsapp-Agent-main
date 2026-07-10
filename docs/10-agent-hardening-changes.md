@@ -13,7 +13,7 @@
 |---|---|
 | **Work state** | Phases 1–4 complete, unit-tested, and validated live. |
 | **Git** | Committed and **pushed to `origin/main`** (Coolify auto-deploys from `main`). See the change log below for the commit series. |
-| **Checks** | `npm test` → **94 pass** · `npm run typecheck` clean · `npm run build` compiles. |
+| **Checks** | `npm test` → **96 pass** · `npm run typecheck` clean · `npm run build` compiles. |
 | **Open action (yours)** | Confirm the **OpenRouter key** is permanently fixed (raise limit / top up / rotate — see §0.1). |
 | **New env (optional)** | `COALESCE_WINDOW_MS` (default 2500), `STAFF_NOTIFY_NUMBER` (set it so alerts/escalation reach staff). |
 | **Deferred (not done, by scope)** | Voice transcription · reminder templates · `/api/health` AI status · horizontal-scale locks — see §7. |
@@ -35,6 +35,18 @@
   explicitly-named stylist. Changes: `check_availability`'s `allFreeTimes` now
   carries `stylists` per slot (was dropped); system-prompt booking step handles
   the selection. Tool-output test updated.
+- **2026-07-10 (follow-up)** — **Reschedule confirmations are now guarded.** The
+  agent replied *"Perfetto! Ho spostato il tuo appuntamento…"* while the DB was
+  **not** updated (verified by querying Supabase — the appointment stayed at its
+  previous time). The confirmation gate only covered *new bookings*
+  (`CONFIRMATION_RE`); a reschedule says *"spostato"*, which slipped through. Fix:
+  added `RESCHEDULE_RE` — a "spostato" claim not backed by a successful
+  `reschedule_appointment` **this turn** is replaced with the real failure (e.g.
+  *"Hai più appuntamenti futuri. Quale vuoi spostare?"*). Unlike new bookings,
+  reschedules don't get the "recent booking in DB" exception (they complete in one
+  turn). +2 tests (96). Underlying trigger: the customer had **multiple** future
+  appointments, so `reschedule_appointment` without an id returns a disambiguation
+  prompt — which the model had been ignoring.
 - **2026-07-10 (adversarial test round, on Sonnet)** — Ran a 12-scenario live
   shakedown against `anthropic/claude-sonnet-4` (prompt injection, fake-confirm
   bait, rapid contradictions, past date, English, gibberish, escalation, …).
