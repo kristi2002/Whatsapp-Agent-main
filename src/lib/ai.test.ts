@@ -68,6 +68,22 @@ describe("getAIResponse", () => {
     expect(executeToolMock).not.toHaveBeenCalled();
   });
 
+  it("returns a clarification without calling the model when all turns are blank", async () => {
+    const reply = await getAIResponse([{ role: "user", content: "   " }], ctx);
+    expect(reply).toContain("non ho ricevuto");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("drops blank turns from history but still answers the real one", async () => {
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "Ciao!", tool_calls: [] } }],
+    });
+    const reply = await getAIResponse([{ role: "user", content: "  " }, { role: "user", content: "ciao" }], ctx);
+    expect(reply).toBe("Ciao!");
+    const sent = createMock.mock.calls[0][0].messages as { content: string }[];
+    expect(sent.some((m) => typeof m.content === "string" && m.content.trim() === "")).toBe(false);
+  });
+
   it("runs a tool call, feeds the result back, then returns the final answer", async () => {
     createMock
       .mockResolvedValueOnce({

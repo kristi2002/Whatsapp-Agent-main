@@ -17,7 +17,8 @@ function getOpenAI(): OpenAI {
   return _openai;
 }
 
-const MODEL = process.env.AI_MODEL || "anthropic/claude-sonnet-4-20250514";
+// Default must be a VALID OpenRouter model id — "…-20250514" is rejected (400).
+const MODEL = process.env.AI_MODEL || "anthropic/claude-sonnet-4";
 const MAX_TOOL_ROUNDS = 5;
 
 /**
@@ -37,9 +38,16 @@ export async function getAIResponse(
     console.error("formatBusinessHours failed:", err);
   }
 
+  // Defensive: drop empty/whitespace-only turns — the model API rejects an empty
+  // content block, and a single such message would break the entire request.
+  const cleanHistory = history.filter((m) => typeof m.content === "string" && m.content.trim().length > 0);
+  if (cleanHistory.length === 0) {
+    return "Scusa, non ho ricevuto nessun testo. Puoi riscrivermi cosa ti serve? 😊";
+  }
+
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: buildSalonSystemPrompt(ctx.now, ctx.customerName, hoursLabel) },
-    ...history,
+    ...cleanHistory,
   ];
 
   // Track the REAL outcome of booking-mutating tools this turn, so we never let

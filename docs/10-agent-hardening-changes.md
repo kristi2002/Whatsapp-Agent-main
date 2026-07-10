@@ -13,7 +13,7 @@
 |---|---|
 | **Work state** | Phases 1–4 complete, unit-tested, and validated live. |
 | **Git** | Committed and **pushed to `origin/main`** (Coolify auto-deploys from `main`). See the change log below for the commit series. |
-| **Checks** | `npm test` → **89 pass** · `npm run typecheck` clean · `npm run build` compiles. |
+| **Checks** | `npm test` → **94 pass** · `npm run typecheck` clean · `npm run build` compiles. |
 | **Open action (yours)** | Confirm the **OpenRouter key** is permanently fixed (raise limit / top up / rotate — see §0.1). |
 | **New env (optional)** | `COALESCE_WINDOW_MS` (default 2500), `STAFF_NOTIFY_NUMBER` (set it so alerts/escalation reach staff). |
 | **Deferred (not done, by scope)** | Voice transcription · reminder templates · `/api/health` AI status · horizontal-scale locks — see §7. |
@@ -35,6 +35,20 @@
   explicitly-named stylist. Changes: `check_availability`'s `allFreeTimes` now
   carries `stylists` per slot (was dropped); system-prompt booking step handles
   the selection. Tool-output test updated.
+- **2026-07-10 (adversarial test round, on Sonnet)** — Ran a 12-scenario live
+  shakedown against `anthropic/claude-sonnet-4` (prompt injection, fake-confirm
+  bait, rapid contradictions, past date, English, gibberish, escalation, …).
+  **11/12 held up.** Two fixes came out of it:
+  - **Invalid default model id.** The code default `anthropic/claude-sonnet-4-20250514`
+    is **rejected by OpenRouter (400)** — the valid id is `anthropic/claude-sonnet-4`.
+    Fixed the default so a deploy with `AI_MODEL` unset doesn't fail every reply.
+  - **Blank / whitespace-only message crashed the turn.** The model API rejects an
+    empty content block, so a `"   "` message threw → "problema tecnico" fallback
+    **and a false AI-down staff alert**; a stored blank would also poison the whole
+    conversation. Fix: webhook skips a blank message (asks to rephrase, doesn't
+    store it, doesn't run the AI); `ai.ts` also filters empty turns from history
+    defensively. +3 tests (94). Verified live: blank → no crash, and a real
+    message after a blank still answers correctly (no poisoning).
 - **2026-07-10 (follow-up)** — **Service list always delivered.** The agent said
   *"Ecco tutti i nostri servizi!"* but listed nothing — because **tool output is
   never shown to the customer**, only the model's own text. Fix: (a) prompt rule

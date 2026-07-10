@@ -45,6 +45,8 @@ function alertStaffAiDown(phone: string, err: unknown): void {
 }
 const NON_TEXT_REPLY =
   "Al momento riesco a leggere solo messaggi di testo. Scrivimi pure a parole cosa ti serve (es. “vorrei prenotare un taglio venerdì”) 😊";
+const EMPTY_TEXT_REPLY =
+  "Scusa, non ho ricevuto nessun testo nel messaggio. Puoi riscrivermi cosa ti serve? 😊";
 
 /**
  * Serialize async tasks per key (phone number) so two webhook deliveries for
@@ -161,6 +163,16 @@ async function ingestMessage(value: any, message: any): Promise<void> {
   }
 
   const text: string = message.text?.body ?? "";
+
+  // Blank / whitespace-only text: don't store it (an empty message poisons the
+  // AI history — the model API rejects empty content) and don't run the AI.
+  // Just ask the customer to rephrase.
+  if (!text.trim()) {
+    if (conversation.mode !== "human") {
+      try { await sendWhatsAppMessage(phone, EMPTY_TEXT_REPLY); } catch (err) { console.error("send failed:", err); }
+    }
+    return;
+  }
 
   // Store the user message (ignore duplicate deliveries).
   const { error: insertError } = await supabase.from("messages").insert({

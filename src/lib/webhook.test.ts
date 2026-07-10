@@ -136,6 +136,15 @@ describe("processEvent", () => {
     expect(sendMock).toHaveBeenCalledWith("393330000000", "Ciao! Come posso aiutarti?");
   });
 
+  it("asks to rephrase on a blank/whitespace-only message (no AI, not stored)", async () => {
+    h.state.queue = [{ data: { id: "c1", mode: "agent", name: "Mario" } }]; // existing conversation
+    await processEvent(textPayload("   "));
+    await flushReply();
+    expect(aiMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][1]).toContain("non ho ricevuto nessun testo");
+  });
+
   it("does not auto-reply in human mode", async () => {
     h.state.queue = [
       { data: { id: "c1", mode: "human", name: "Mario" } }, // existing conversation
