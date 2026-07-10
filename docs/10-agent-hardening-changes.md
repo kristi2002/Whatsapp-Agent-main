@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Work state** | Phases 1–4 complete, unit-tested, and validated live. |
-| **Git** | **Uncommitted** — changes are in the working tree, nothing branched/pushed. Run `git status` to see the 15 modified + 3 new files (listed in §5). |
-| **Checks** | `npm test` → **88 pass** · `npm run typecheck` clean · `npm run build` compiles. |
+| **Git** | Committed and **pushed to `origin/main`** (Coolify auto-deploys from `main`). See the change log below for the commit series. |
+| **Checks** | `npm test` → **89 pass** · `npm run typecheck` clean · `npm run build` compiles. |
 | **Open action (yours)** | Confirm the **OpenRouter key** is permanently fixed (raise limit / top up / rotate — see §0.1). |
 | **New env (optional)** | `COALESCE_WINDOW_MS` (default 2500), `STAFF_NOTIFY_NUMBER` (set it so alerts/escalation reach staff). |
 | **Deferred (not done, by scope)** | Voice transcription · reminder templates · `/api/health` AI status · horizontal-scale locks — see §7. |
@@ -21,7 +21,13 @@
 
 ### Change log (append future rounds here)
 - **2026-07-10** — Initial hardening round (Phases 1–4). This document created;
-  `docs/02`, `05`, `07`, `README` updated. Not yet committed.
+  `docs/02`, `05`, `07`, `README` updated. Committed `2fcb098`, pushed to `main`.
+- **2026-07-10 (follow-up)** — **Service is never assumed.** The agent was
+  suggesting "Taglio donna" when the customer named no service (*"volevo fare un
+  appuntamento per domani"*). Fix: (a) system-prompt rule forbidding any
+  service assumption — ask or `list_services` first; (b) `matchService` now
+  returns `null` for a blank/whitespace query instead of silently matching the
+  first service (`"name".includes("")` was always true). +1 regression test (89).
 
 **Scope agreed:** *"just fix the gaps found"* + two dashboard-chat requests. No
 new platform features. Deployment target unchanged: **app on Hetzner, Supabase

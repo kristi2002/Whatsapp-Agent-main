@@ -48,6 +48,9 @@ export async function listActiveStylists(): Promise<Stylist[]> {
 /** Fuzzy-match a service by name (case-insensitive substring) or exact id. */
 function matchService(services: Service[], query: string): Service | null {
   const q = query.trim().toLowerCase();
+  // A blank query must NOT resolve to a service — `"name".includes("")` is always
+  // true and would silently pick the first service. Force the caller to specify.
+  if (!q) return null;
   return (
     services.find((s) => s.id === query) ||
     services.find((s) => s.name.toLowerCase() === q) ||

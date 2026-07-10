@@ -69,6 +69,14 @@ describe("checkAvailability — validation branches", () => {
     expect(res.message).toContain("Non ho trovato il servizio");
   });
 
+  it("does NOT resolve a blank service to the first row (must be asked, never assumed)", async () => {
+    // Two services present; a blank/whitespace service must not silently pick one.
+    h.state.queue = [{ data: [svc({ name: "Acconciatura" }), svc({ id: "s2", name: "Taglio donna" })] }];
+    const res = await checkAvailability({ service: "   ", date: "2025-07-18", now: NOW });
+    expect(res.ok).toBe(false);
+    expect(res.message).toContain("Non ho trovato il servizio");
+  });
+
   it("rejects a past date", async () => {
     h.state.queue = [{ data: [svc()] }];
     const res = await checkAvailability({ service: "Taglio donna", date: "2020-01-01", now: NOW });
