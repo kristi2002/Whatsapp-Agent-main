@@ -28,6 +28,13 @@
   service assumption — ask or `list_services` first; (b) `matchService` now
   returns `null` for a blank/whitespace query instead of silently matching the
   first service (`"name".includes("")` was always true). +1 regression test (89).
+- **2026-07-10 (follow-up)** — **Stylist choice offered when >1 free.** The agent
+  auto-assigned a stylist without asking. Now, when **more than one** stylist can
+  do the service at the chosen time, it lists them and asks which one before
+  booking; it still auto-assigns silently when only one is free, and honors an
+  explicitly-named stylist. Changes: `check_availability`'s `allFreeTimes` now
+  carries `stylists` per slot (was dropped); system-prompt booking step handles
+  the selection. Tool-output test updated.
 
 **Scope agreed:** *"just fix the gaps found"* + two dashboard-chat requests. No
 new platform features. Deployment target unchanged: **app on Hetzner, Supabase

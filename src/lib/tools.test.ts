@@ -57,13 +57,15 @@ describe("executeTool routing", () => {
       message: "Orari disponibili",
       serviceName: "Taglio donna",
       options: [{ iso: "2025-07-15T08:00:00.000Z", label: "10:00", stylists: ["Genny"] }],
+      allSlots: [{ iso: "2025-07-15T08:00:00.000Z", time: "10:00", stylists: ["Genny", "Maria"] }],
     });
     const out = JSON.parse(await executeTool("check_availability", { service: "Taglio", date: "2025-07-15" }, ctx));
     expect(out).toEqual({
       message: "Orari disponibili",
       service: "Taglio donna",
       options: [{ iso: "2025-07-15T08:00:00.000Z", label: "10:00", stylists: ["Genny"] }],
-      allFreeTimes: [],
+      // allFreeTimes carries the free stylists per slot (drives the "choose stylist" prompt).
+      allFreeTimes: [{ time: "10:00", iso: "2025-07-15T08:00:00.000Z", stylists: ["Genny", "Maria"] }],
     });
     expect(booking.checkAvailability).toHaveBeenCalledWith(
       expect.objectContaining({ service: "Taglio", date: "2025-07-15", now: ctx.now })

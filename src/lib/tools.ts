@@ -185,7 +185,9 @@ export async function executeTool(
           message: res.message,
           service: res.serviceName,
           options: res.options ?? [],
-          allFreeTimes: (res.allSlots ?? []).map((sl) => ({ time: sl.time, iso: sl.iso })),
+          // Include the free stylists per slot so the model can offer a choice
+          // when more than one is available at the time the customer picks.
+          allFreeTimes: (res.allSlots ?? []).map((sl) => ({ time: sl.time, iso: sl.iso, stylists: sl.stylists })),
         });
       }
       case "book_appointment": {
