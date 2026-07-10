@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { buildSalonSystemPrompt } from "@/lib/system-prompt";
-import { formatBusinessHours, hasRecentBooking } from "@/lib/booking";
+import { formatBusinessHours, hasRecentBooking, listActiveServices, formatServiceList } from "@/lib/booking";
 import { escalateAndNotify } from "@/lib/escalation";
 import { TOOL_DEFINITIONS, executeTool, type ToolContext } from "@/lib/tools";
 
@@ -63,6 +63,12 @@ export async function getAIResponse(
   const ESCALATION_RE =
     /(inoltrat\w+|passat\w+|segnalat\w+|avvisat\w+|allertat\w+)[^.!?\n]{0,40}operator|un\s+operator\w+[^.!?\n]{0,30}(ti\s+)?(ricontatt|rispond)/i;
 
+  // A reply that PROMISES to show the service list ("ecco i nostri servizi",
+  // "ti elenco i servizi"). Tool output isn't shown to the customer, so if the
+  // model says this without actually listing anything, we append the real list.
+  const SERVICES_PROMISE_RE =
+    /(ecco|questi sono|ti (elenco|mostro)|di seguito|trovi qui)[^.!?\n]{0,25}\bserviz/i;
+
   // A reply that claims a NEW booking was just made (not a reschedule, which
   // says "spostato", nor a listing from get_my_appointments).
   const CONFIRMATION_RE =
@@ -124,6 +130,20 @@ export async function getAIResponse(
         }
       } catch (err) {
         console.error(`${logPrefix} escalation safety net failed:`, err);
+      }
+    }
+    // Safety net: the model promised the service list but the customer can't see
+    // tool output. If the reply names no actual service, append the real list.
+    if (SERVICES_PROMISE_RE.test(reply)) {
+      try {
+        const services = await listActiveServices();
+        const namesAlreadyShown = services.some((s) => reply.toLowerCase().includes(s.name.toLowerCase()));
+        if (services.length && !namesAlreadyShown) {
+          console.log(`${logPrefix} appended the service list (model promised it without listing it).`);
+          return `${reply}\n\n${formatServiceList(services)}`;
+        }
+      } catch (err) {
+        console.error(`${logPrefix} service-list safety net failed:`, err);
       }
     }
     return reply;

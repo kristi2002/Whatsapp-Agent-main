@@ -6,6 +6,9 @@ const executeToolMock = vi.fn(async () => "RISULTATO_STRUMENTO");
 const hasRecentBookingMock = vi.fn(async () => false);
 // The escalation safety net (model claims a handoff without calling the tool).
 const escalateAndNotifyMock = vi.fn(async () => ({ ok: true, message: "ok" }));
+// The service-list safety net (model promises services without listing them).
+const listActiveServicesMock = vi.fn(async () => [] as { name: string }[]);
+const formatServiceListMock = vi.fn(() => "• Taglio donna — 45 min — €25,00");
 
 vi.mock("openai", () => ({
   default: class {
@@ -23,6 +26,8 @@ vi.mock("@/lib/tools", () => ({
 vi.mock("@/lib/booking", () => ({
   formatBusinessHours: async () => "Aperto:\n- martedì: 09:00–19:00\nChiuso: domenica, lunedì.",
   hasRecentBooking: (...a: unknown[]) => hasRecentBookingMock(...(a as [])),
+  listActiveServices: (...a: unknown[]) => listActiveServicesMock(...(a as [])),
+  formatServiceList: (...a: unknown[]) => formatServiceListMock(...(a as [])),
 }));
 
 vi.mock("@/lib/escalation", () => ({
@@ -45,6 +50,10 @@ beforeEach(() => {
   hasRecentBookingMock.mockResolvedValue(false);
   escalateAndNotifyMock.mockClear();
   escalateAndNotifyMock.mockResolvedValue({ ok: true, message: "ok" });
+  listActiveServicesMock.mockReset();
+  listActiveServicesMock.mockResolvedValue([]);
+  formatServiceListMock.mockClear();
+  formatServiceListMock.mockReturnValue("• Taglio donna — 45 min — €25,00");
 });
 
 describe("getAIResponse", () => {
@@ -204,5 +213,29 @@ describe("getAIResponse", () => {
     });
     await getAIResponse([{ role: "user", content: "Ciao" }], ctx);
     expect(escalateAndNotifyMock).not.toHaveBeenCalled();
+  });
+
+  it("appends the service list when the model promises it but lists nothing", async () => {
+    listActiveServicesMock.mockResolvedValue([{ name: "Taglio donna" }, { name: "Piega" }]);
+    formatServiceListMock.mockReturnValue("• Taglio donna — 45 min — €25,00\n• Piega — 40 min — €20,00");
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "Ecco tutti i nostri servizi! Quale vorresti per il 15?", tool_calls: [] } }],
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "che servizi avete?" }], ctx);
+    expect(reply).toContain("Ecco tutti i nostri servizi"); // original text kept
+    expect(reply).toContain("Taglio donna — 45 min");        // real list appended
+    expect(reply).toContain("Piega — 40 min");
+  });
+
+  it("does NOT append the list when the reply already names a service", async () => {
+    listActiveServicesMock.mockResolvedValue([{ name: "Taglio donna" }]);
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "Ecco i nostri servizi: Taglio donna a 25€. Quale preferisci?", tool_calls: [] } }],
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "servizi?" }], ctx);
+    expect(reply).toBe("Ecco i nostri servizi: Taglio donna a 25€. Quale preferisci?");
+    expect(formatServiceListMock).not.toHaveBeenCalled();
   });
 });

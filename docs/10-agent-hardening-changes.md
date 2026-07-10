@@ -35,6 +35,12 @@
   explicitly-named stylist. Changes: `check_availability`'s `allFreeTimes` now
   carries `stylists` per slot (was dropped); system-prompt booking step handles
   the selection. Tool-output test updated.
+- **2026-07-10 (follow-up)** — **Service list always delivered.** The agent said
+  *"Ecco tutti i nostri servizi!"* but listed nothing — because **tool output is
+  never shown to the customer**, only the model's own text. Fix: (a) prompt rule
+  stating tool results are invisible and must be copied into the reply; (b) a
+  safety net in `ai.ts` that appends the real `list_services` output when the
+  reply promises the services (`SERVICES_PROMISE_RE`) but names none. +2 tests (91).
 
 **Scope agreed:** *"just fix the gaps found"* + two dashboard-chat requests. No
 new platform features. Deployment target unchanged: **app on Hetzner, Supabase
