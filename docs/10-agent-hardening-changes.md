@@ -20,6 +20,11 @@
 | **How to resume** | Read this file top-to-bottom; the phase sections (§1–§4) each say *what/why/files/tests*. To re-verify: `npm test`, or run the app and send two quick WhatsApp messages that together form one booking → expect a single clean reply. |
 
 ### Change log (append future rounds here)
+- **2026-07-10 (UI)** — **Themed dropdowns + faster calendar.** Rewrote the shared
+  `Select` as a themed **Radix Select** with a drop-in native-`<select>` API (all
+  22 usages unchanged) so the OPEN option list matches the app instead of the OS
+  default; converted the one remaining raw `<select>`. Calendar auto-refresh
+  **20 s → 5 s** so agent/staff changes appear almost immediately (silent refetch).
 - **2026-07-10 (UI)** — "Svuota chat" now opens a **centered themed confirmation
   modal** (reusing the app's Radix `Modal` + `Button`, danger styling) instead of
   the native `window.confirm`/`alert`. Audited dropdowns: all date/time pickers

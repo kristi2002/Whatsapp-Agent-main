@@ -55,7 +55,7 @@ export default function CalendarPage() {
   // WhatsApp agent) appear without a manual refresh. Also refresh when the tab
   // regains focus so staff see changes the moment they return to the calendar.
   useEffect(() => {
-    const t = setInterval(() => loadAppts(date, true), 20_000);
+    const t = setInterval(() => loadAppts(date, true), 5_000);
     const onFocus = () => loadAppts(date, true);
     window.addEventListener("focus", onFocus);
     return () => { clearInterval(t); window.removeEventListener("focus", onFocus); };

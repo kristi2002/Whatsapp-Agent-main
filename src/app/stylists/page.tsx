@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Plus, Pencil, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import { Card, Button, Modal, Field, Input } from "@/components/ui";
+import { Card, Button, Modal, Field, Input, Select } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
 import { StatCard, Avatar } from "@/components/kit";
 import type { ServiceRow } from "@/lib/gestionale-types";
@@ -62,7 +62,7 @@ export default function StylistsPage() {
 
       <Filters activeCount={activeFilters} onReset={() => { setQ(""); setStatus("active"); }}>
         <FilterField label="Cerca"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome" /></FilterField>
-        <FilterField label="Stato"><select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full h-9 px-3 rounded-lg text-sm appearance-none" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }}><option value="active">Attivi</option><option value="inactive">Disattivati</option><option value="all">Tutti</option></select></FilterField>
+        <FilterField label="Stato"><Select value={status} onChange={(e) => setStatus(e.target.value)}><option value="active">Attivi</option><option value="inactive">Disattivati</option><option value="all">Tutti</option></Select></FilterField>
       </Filters>
 
       {loading ? <p className="text-sm text-muted">Caricamento…</p> : (
