@@ -567,6 +567,33 @@ export async function rescheduleAppointment(params: {
   };
 }
 
+/**
+ * True if this phone has an upcoming `booked` appointment CREATED within the
+ * last `withinMin` minutes. Used by the AI confirmation gate: when the model
+ * says "prenotazione confermata" but no booking tool succeeded in the current
+ * turn, the booking may still be real — e.g. it completed in a previous turn
+ * because the customer split the request across two WhatsApp messages. In that
+ * case the confirmation is legitimate and must not be replaced with a failure.
+ *
+ * Scoped to recently-created rows so a stale, unrelated future appointment
+ * doesn't wave through a genuinely hallucinated confirmation.
+ */
+export async function hasRecentBooking(
+  phone: string,
+  now: Date = new Date(),
+  withinMin = 5
+): Promise<boolean> {
+  const since = new Date(now.getTime() - withinMin * 60_000).toISOString();
+  const { count } = await supabase
+    .from("appointments")
+    .select("id", { count: "exact", head: true })
+    .eq("customer_phone", phone)
+    .eq("status", "booked")
+    .gte("created_at", since)
+    .gte("starts_at", now.toISOString());
+  return (count ?? 0) > 0;
+}
+
 /** Number of self-service (online) bookings this phone made in the last 24h. */
 export async function recentOnlineBookingCount(phone: string, now: Date = new Date()): Promise<number> {
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
@@ -577,6 +604,41 @@ export async function recentOnlineBookingCount(phone: string, now: Date = new Da
     .eq("source", "online")
     .gte("created_at", since);
   return count ?? 0;
+}
+
+/**
+ * Hand a conversation over to a human operator: flip its mode to "human" so the
+ * webhook stops auto-replying and staff take over from the dashboard. Returns a
+ * customer-facing message the agent relays. The staff alert is sent by the
+ * caller (tools dispatcher) so this stays a pure DB operation.
+ */
+export async function escalateToHuman(params: {
+  conversationId?: string | null;
+}): Promise<{ ok: boolean; message: string }> {
+  if (!params.conversationId) {
+    return {
+      ok: false,
+      message:
+        "Va bene, avviso subito un operatore. Se serve puoi anche chiamare il salone.",
+    };
+  }
+  const { error } = await supabase
+    .from("conversations")
+    .update({ mode: "human", updated_at: new Date().toISOString() })
+    .eq("id", params.conversationId);
+  if (error) {
+    console.error("escalateToHuman update failed:", error);
+    return {
+      ok: false,
+      message:
+        "Ho provato a passarti a un operatore ma c'è stato un problema. Puoi chiamare il salone?",
+    };
+  }
+  return {
+    ok: true,
+    message:
+      "Ho passato la conversazione a un operatore del salone: ti risponderà appena possibile qui su WhatsApp. 🙏",
+  };
 }
 
 /** Italian weekday names, indexed 0 = domenica … 6 = sabato. */

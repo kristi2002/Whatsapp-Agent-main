@@ -14,6 +14,7 @@ import {
   getAppointmentsForPhone,
   cancelAppointment,
 } from "@/lib/booking";
+import { escalateAndNotify } from "@/lib/escalation";
 
 export interface ToolContext {
   customerPhone: string;
@@ -129,6 +130,24 @@ export const TOOL_DEFINITIONS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "escalate_to_human",
+      description:
+        "Passa la conversazione a un operatore umano del salone. Usalo quando il cliente CHIEDE ESPLICITAMENTE di parlare con una persona, quando è insoddisfatto/arrabbiato, o quando la richiesta è troppo complessa per te (reclami, casi particolari, domande a cui non sai rispondere con gli strumenti). Dopo averlo usato, avvisa il cliente che un operatore gli risponderà. NON usarlo per normali prenotazioni/modifiche/annullamenti, che gestisci tu.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: {
+            type: "string",
+            description: "Breve motivo dell'inoltro (es. 'cliente insoddisfatto', 'reclamo', 'richiesta complessa').",
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 /**
@@ -202,6 +221,16 @@ export async function executeTool(
           appointmentId: (args.appointmentId as string) ?? undefined,
           customerPhone: ctx.customerPhone,
           now: ctx.now,
+        });
+        track?.({ name, ok: res.ok, message: res.message });
+        return res.message;
+      }
+      case "escalate_to_human": {
+        const res = await escalateAndNotify({
+          conversationId: ctx.conversationId,
+          customerPhone: ctx.customerPhone,
+          customerName: ctx.customerName,
+          reason: (args.reason as string) ?? null,
         });
         track?.({ name, ok: res.ok, message: res.message });
         return res.message;

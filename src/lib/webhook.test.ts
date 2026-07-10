@@ -29,9 +29,11 @@ const typingMock = vi.fn(async (_id: string) => {});
 
 vi.mock("@/lib/supabase", () => ({ supabase: h.supabase, getSupabase: () => h.supabase }));
 vi.mock("@/lib/ai", () => ({ getAIResponse: (...a: unknown[]) => aiMock(...(a as [])) }));
+const notifyStaffMock = vi.fn(async (_msg: string) => {});
 vi.mock("@/lib/whatsapp", () => ({
   sendWhatsAppMessage: (...a: unknown[]) => sendMock(...(a as [string, string])),
   sendTypingIndicator: (...a: unknown[]) => typingMock(...(a as [string])),
+  notifyStaff: (...a: unknown[]) => notifyStaffMock(...(a as [string])),
 }));
 
 import { verifySignature, processEvent, runSerial } from "@/lib/webhook";
@@ -61,6 +63,7 @@ beforeEach(() => {
   aiMock.mockClear();
   sendMock.mockClear();
   typingMock.mockClear();
+  notifyStaffMock.mockClear();
 });
 
 afterEach(() => {
@@ -92,8 +95,17 @@ describe("verifySignature", () => {
 });
 
 describe("processEvent", () => {
+  // The reply is debounced (coalescing window). Use fake timers and advance
+  // past the default window to flush the scheduled reply.
+  const WINDOW = 3000;
+  const flushReply = () => vi.advanceTimersByTimeAsync(WINDOW);
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
   it("ignores non-WhatsApp payloads", async () => {
     await processEvent({ object: "page" });
+    await flushReply();
     expect(aiMock).not.toHaveBeenCalled();
     expect(sendMock).not.toHaveBeenCalled();
   });
@@ -102,6 +114,7 @@ describe("processEvent", () => {
     const p = textPayload("x");
     p.entry[0].changes[0].value.messages[0].type = "image";
     await processEvent(p);
+    await flushReply();
     expect(aiMock).not.toHaveBeenCalled();
   });
 
@@ -110,15 +123,17 @@ describe("processEvent", () => {
       { data: null }, // select conversation -> not found
       { data: { id: "c1", mode: "agent", name: "Mario" } }, // insert conversation
       { error: null }, // insert user message
-      {}, // update conversation timestamp
-      { data: [] }, // select history
+      {}, // update conversation timestamp (ingest)
+      { data: [] }, // select history (reply)
       // trailing insert(assistant) + update default to {data:null}
     ];
     await processEvent(textPayload("Ciao"));
+    // A typing indicator is fired at ingest, before the debounced reply runs.
+    expect(typingMock).toHaveBeenCalledWith("wamid.1");
+    expect(aiMock).not.toHaveBeenCalled(); // reply is still debounced
+    await flushReply();
     expect(aiMock).toHaveBeenCalledTimes(1);
     expect(sendMock).toHaveBeenCalledWith("393330000000", "Ciao! Come posso aiutarti?");
-    // A typing indicator is fired for the inbound message before the AI runs.
-    expect(typingMock).toHaveBeenCalledWith("wamid.1");
   });
 
   it("does not auto-reply in human mode", async () => {
@@ -128,6 +143,7 @@ describe("processEvent", () => {
       {}, // update timestamp
     ];
     await processEvent(textPayload("Ciao"));
+    await flushReply();
     expect(aiMock).not.toHaveBeenCalled();
     expect(sendMock).not.toHaveBeenCalled();
   });
@@ -138,6 +154,7 @@ describe("processEvent", () => {
       { error: { code: "23505" } }, // insert user message -> duplicate
     ];
     await processEvent(textPayload("Ciao"));
+    await flushReply();
     expect(aiMock).not.toHaveBeenCalled();
     expect(sendMock).not.toHaveBeenCalled();
   });
@@ -151,8 +168,11 @@ describe("processEvent", () => {
       { data: [] }, // history
     ];
     await processEvent(textPayload("Ciao"));
+    await flushReply();
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][1]).toContain("problema tecnico");
+    // Staff are alerted that the assistant is down (not a silent failure).
+    expect(notifyStaffMock).toHaveBeenCalledTimes(1);
   });
 
   it("acknowledges a non-text message with a text-only note (agent mode)", async () => {
@@ -160,12 +180,13 @@ describe("processEvent", () => {
     p.entry[0].changes[0].value.messages[0].type = "audio";
     h.state.queue = [{ data: { id: "c1", mode: "agent", name: "Mario" } }]; // existing conversation
     await processEvent(p);
+    await flushReply();
     expect(aiMock).not.toHaveBeenCalled();
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][1]).toContain("solo messaggi di testo");
   });
 
-  it("processes EVERY message in a batch, not just the first", async () => {
+  it("stores every message in a burst but COALESCES them into a single reply", async () => {
     const batch = {
       object: "whatsapp_business_account",
       entry: [{ changes: [{ value: {
@@ -176,15 +197,21 @@ describe("processEvent", () => {
         ],
       } }] }],
     };
-    // Two full agent cycles (select, insertUser, updateTs, history, insertAssistant, updateTs).
+    // Two ingests (select, insertUser, updateTs each) then ONE reply
+    // (history, insertAssistant, updateTs).
     const conv = { data: { id: "c1", mode: "agent", name: "Mario" } };
     h.state.queue = [
-      conv, { error: null }, {}, { data: [] }, {}, {},
-      conv, { error: null }, {}, { data: [] }, {}, {},
+      conv, { error: null }, {},
+      conv, { error: null }, {},
+      { data: [] }, {}, {},
     ];
     await processEvent(batch);
-    expect(aiMock).toHaveBeenCalledTimes(2);
-    expect(sendMock).toHaveBeenCalledTimes(2);
+    // Both messages were ingested (typing fired for each).
+    expect(typingMock).toHaveBeenCalledTimes(2);
+    await flushReply();
+    // ...but the agent answers the burst as a single turn.
+    expect(aiMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledTimes(1);
   });
 });
 

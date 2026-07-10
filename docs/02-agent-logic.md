@@ -71,9 +71,10 @@ sendWhatsAppMessage(phone, reply)  → Meta Graph API → customer
 | File | Responsibility |
 |---|---|
 | `src/app/api/webhook/route.ts` | Thin HTTP wrapper: GET verification, POST signature-check + fire-and-forget. |
-| `src/lib/webhook.ts` | `verifySignature`, `processEvent`, `processMessage`, per-phone serialization. The testable core. |
-| `src/lib/ai.ts` | `getAIResponse` — the tool-calling loop + the anti-hallucination confirmation gate. |
-| `src/lib/tools.ts` | Tool JSON schemas (`TOOL_DEFINITIONS`) + `executeTool` dispatcher. |
+| `src/lib/webhook.ts` | `verifySignature`, `processEvent`, `ingestMessage`, `scheduleReply` (coalescing, §3.4), `generateAndSendReply`, per-phone serialization, AI-failure staff alert. The testable core. |
+| `src/lib/ai.ts` | `getAIResponse` — the tool-calling loop + the anti-hallucination confirmation gate (DB-aware, §4.3) + the escalation safety net (§9.2). |
+| `src/lib/tools.ts` | Tool JSON schemas (`TOOL_DEFINITIONS`, 7 tools) + `executeTool` dispatcher. |
+| `src/lib/escalation.ts` | `escalateAndNotify` — shared human-handoff (flip mode + alert staff), used by the tool and the safety net. |
 | `src/lib/booking.ts` | Real DB access: services, availability, book/reschedule/cancel, opening-hours text. |
 | `src/lib/availability.ts` | Pure slot-computation engine (no I/O). |
 | `src/lib/timezone.ts` | DST-safe UTC ⇄ Europe/Rome helpers (Intl only, no deps). |
@@ -107,11 +108,15 @@ each new task after the previous one for that phone. Correct for a **single
 persistent Node instance** (the deployment target). It would need Redis/DB locks
 if scaled horizontally.
 
-### 3.3 `processEvent` → `processMessage`
-- Ignores anything that isn't `object === "whatsapp_business_account"`.
-- Iterates **every** message in the batch (Meta may send several) so one bad
-  message can't drop the others.
-- For each message, `processMessage(value, message)` does:
+### 3.3 `processEvent` → `ingestMessage` → (debounced) `generateAndSendReply`
+Inbound handling is split into a fast **ingest** step and a debounced **reply**
+step so a burst of messages is stored in order but answered once (see §3.4).
+
+- `processEvent` ignores anything that isn't `object ===
+  "whatsapp_business_account"`, and iterates **every** message in the batch (Meta
+  may send several) so one bad message can't drop the others.
+- **`ingestMessage(value, message)`** — serialized per phone (`runSerial`), fast,
+  never runs the AI:
   1. **Find or create** the `conversations` row by `phone`. If the WhatsApp
      profile name changed, update it.
   2. **Non-text messages** (voice/image/location): if not in human mode, send a
@@ -122,19 +127,43 @@ if scaled horizontally.
   4. Bump `conversation.updated_at`.
   5. **Human mode gate:** if `conversation.mode === "human"`, **return without
      replying** — staff will answer from the dashboard.
-  5b. **Typing indicator:** fire `sendTypingIndicator(whatsappMsgId)`
-     (fire-and-forget) so the customer sees a native "typing…" bubble while the
-     tool loop runs. See §9.1.
-  6. **Load history:** the most recent **20** messages, re-ordered chronologically.
-  7. Call `getAIResponse(history, ctx)`. Any thrown error → a safe Italian
-     fallback message (the customer is *never* left without a reply).
-  8. `sendWhatsAppMessage(phone, reply)`.
-  9. Store the assistant message and bump `updated_at` again.
+  6. **Typing indicator:** fire `sendTypingIndicator(whatsappMsgId)`
+     (fire-and-forget) so the customer sees a native "typing…" bubble. See §9.1.
+  7. **Schedule the debounced reply** (`scheduleReply`) — see §3.4.
+- **`generateAndSendReply(snap)`** — runs after the coalescing window, serialized
+  per phone:
+  1. **Load history:** the most recent **20** messages, re-ordered chronologically
+     (so a coalesced burst is answered together).
+  2. Call `getAIResponse(history, ctx)`. Any thrown error → a safe Italian
+     fallback message (the customer is *never* left without a reply) **and a
+     rate-limited staff alert** via `STAFF_NOTIFY_NUMBER` (see §10).
+  3. `sendWhatsAppMessage(phone, reply)`.
+  4. Store the assistant message and bump `updated_at`.
 
 **`ToolContext` (`ctx`) passed into the AI:**
 ```ts
 { customerPhone, customerName, conversationId, now: new Date() }
 ```
+
+### 3.4 Message coalescing (debounced reply)
+People type on WhatsApp in **bursts** — e.g. *"Vorrei un appuntamento oggi alle
+16 per una piega a nome di Maria Paola"* immediately followed by *"Con Genny"*.
+Answering each message as its own AI turn double-processes one intent: the agent
+would book on the first turn, then produce a second (un-backed) "confermato" that
+the safety gate turned into a confusing *"Scusa, non sono riuscito…"*.
+
+`scheduleReply(phone)` fixes this at the root. Every ingested text message (agent
+mode) **(re)starts a per-phone timer** of `COALESCE_WINDOW_MS` (default **2500 ms**,
+`0` disables). Each new message within the window `clearTimeout`s the previous
+timer, so **only the last message in a burst triggers the reply**, and the reply
+sees the full history. Guarantees:
+
+- **Nothing is dropped** — every message is still stored at ingest.
+- **One reply per burst** — not one per message.
+- The reply is wrapped in `runSerial(phone, …)` so two bursts can't produce
+  overlapping answers, and it runs after any in-flight ingest for that phone.
+- In-memory timers → correct for a **single persistent Node instance** (the
+  deployment target), like `runSerial`.
 
 ---
 
@@ -188,11 +217,22 @@ prevent it:
 > The regex is intentionally scoped to *new* bookings — reschedules say "spostato"
 > and listings from `get_my_appointments` are not confirmations, so those pass.
 
+**DB-aware exception (added).** A confirmation can be legitimate even when no
+booking tool ran *this* turn — e.g. the customer split the request across two
+messages, so the booking completed in the *previous* turn and this turn only
+echoes "confermato". To avoid contradicting a real booking with a false "Scusa,
+non sono riuscito…", the gate now checks the database before blocking: if
+`hasRecentBooking(phone)` finds an upcoming appointment for that phone **created
+in the last 5 minutes**, the confirmation is allowed through. It still blocks a
+pure hallucination (no recent booking) and still blocks when a booking tool was
+attempted and *failed* this turn (`bookingFailed`). See also the message
+**coalescing** in §3.4, which prevents the split-message double-turn at the root.
+
 ---
 
 ## 5. The tools (`src/lib/tools.ts`)
 
-The model is given six functions. It decides *when* to call them; the code does
+The model is given seven functions. It decides *when* to call them; the code does
 the real work and validation. All descriptions are in Italian (the model reads
 them). Summary:
 
@@ -204,6 +244,7 @@ them). Summary:
 | `reschedule_appointment` | `startIso`, `appointmentId?`, `stylist?`, `service?` | Moves an **existing** booking (same row) — never creates a duplicate. | **yes** |
 | `get_my_appointments` | — | Lists the caller's future bookings (by phone). | no |
 | `cancel_appointment` | `appointmentId?` | Cancels the caller's booking (sets status `cancelled`). | **yes** |
+| `escalate_to_human` | `reason?` | Hands the conversation to a human: flips `conversations.mode` to `human` (agent stops auto-replying) and alerts `STAFF_NOTIFY_NUMBER`. See §9.2. | **yes** (mode) |
 
 ### 5.1 Why `check_availability` returns two lists
 - **`options`** — a small, spread-across-the-day sample (max `BOOKING.maxSlotsReturned`
@@ -336,6 +377,25 @@ can't delay or block the actual answer.
   - Staff can also send a manual message in **agent** mode (override) from the
     same UI.
 
+### 9.2 AI-initiated escalation (`escalate_to_human`)
+The agent can hand a conversation to staff **on its own** when the customer asks
+for a person, is unhappy/angry, has a complaint, or the request is beyond the
+tools. The model calls the `escalate_to_human` tool, which (via
+`escalateAndNotify`, `src/lib/escalation.ts`):
+1. Flips `conversations.mode` to `human` (`escalateToHuman` in `booking.ts`), so
+   the webhook stops auto-replying and staff take over from the dashboard.
+2. Sends a WhatsApp alert to **`STAFF_NOTIFY_NUMBER`** ("a customer needs an
+   operator…") — best-effort, no-op if the number isn't set. This finally wires
+   up the previously-dead staff-notify number.
+
+**Enforcement safety net.** Models sometimes *narrate* a handoff ("ho inoltrato la
+tua richiesta a un operatore") without actually calling the tool. Mirroring the
+booking gate's "code is the source of truth" rule, `finalize()` in `ai.ts` runs an
+`ESCALATION_RE` check: if the reply claims a handoff but `escalate_to_human` was
+**not** called this turn, it performs the escalation anyway (flip mode + alert).
+So a promised handoff always really happens. The system prompt also instructs the
+model to always call the tool and never merely claim it.
+
 ### Appointment reminders (a second outbound channel)
 `GET /api/cron/reminders?key=CRON_SECRET` (not automatic — you must schedule it)
 messages booked appointments starting ~20–28 h out that haven't been reminded
@@ -351,8 +411,11 @@ an approved template, not plain text.**
 |---|---|
 | Meta re-delivers a message | Duplicate `whatsapp_msg_id` → insert `23505` → ignored. |
 | Two messages from the same phone at once | Serialized per phone (`runSerial`). |
-| AI/model throws or times out | Customer gets the safe Italian fallback; nothing crashes. |
-| Model claims a booking that didn't happen | Blocked by the `finalize()` confirmation gate. |
+| A burst of messages (one intent split across several) | **Coalesced** into a single AI turn (`COALESCE_WINDOW_MS`, §3.4) — one reply, no double-processing. |
+| AI/model throws or times out | Customer gets the safe Italian fallback; nothing crashes; **staff alerted** (rate-limited, once / 15 min) via `STAFF_NOTIFY_NUMBER`. |
+| OpenRouter key over quota / expired (HTTP 403) | Same as above — fallback to customer + staff alert. Fix the key/credit in OpenRouter. |
+| Model claims a booking that didn't happen | Blocked by the `finalize()` confirmation gate — **unless** the DB shows a real recent booking for that phone (split-message case, §4.3), which is allowed through. |
+| Model claims a human handoff without calling the tool | `finalize()` enforces it: flips to `human` + alerts staff (§9.2). |
 | Slot taken between check and insert | DB exclusion constraint → clean "pick another". |
 | Non-text message (voice/image) | One-line "text only" reply (agent mode); AI not run. |
 | AI loop takes several seconds | Native "typing…" indicator shown up front (§9.1); customer isn't left staring at a blank chat. |

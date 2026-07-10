@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { buildSalonSystemPrompt } from "@/lib/system-prompt";
-import { formatBusinessHours } from "@/lib/booking";
+import { formatBusinessHours, hasRecentBooking } from "@/lib/booking";
+import { escalateAndNotify } from "@/lib/escalation";
 import { TOOL_DEFINITIONS, executeTool, type ToolContext } from "@/lib/tools";
 
 // Lazily construct the client so importing this module (e.g. during
@@ -46,14 +47,21 @@ export async function getAIResponse(
   let bookingOk = false;       // a book/reschedule actually succeeded
   let bookingFailed = false;   // a book/reschedule was attempted but failed
   let lastFailureMsg = "";     // the real failure message to relay instead
+  let escalated = false;       // escalate_to_human actually ran this turn
   const logPrefix = `[ai convo=${ctx.conversationId ?? "?"}]`;
   const track = (o: { name: string; ok: boolean; message: string }) => {
     if (o.name === "book_appointment" || o.name === "reschedule_appointment") {
       if (o.ok) bookingOk = true;
       else { bookingFailed = true; lastFailureMsg = o.message; }
     }
+    if (o.name === "escalate_to_human" && o.ok) escalated = true;
     console.log(`${logPrefix} tool result ${o.name} ok=${o.ok}`);
   };
+
+  // A reply that CLAIMS the conversation was handed to a human operator. Used to
+  // enforce the action if the model narrated it without calling the tool.
+  const ESCALATION_RE =
+    /(inoltrat\w+|passat\w+|segnalat\w+|avvisat\w+|allertat\w+)[^.!?\n]{0,40}operator|un\s+operator\w+[^.!?\n]{0,30}(ti\s+)?(ricontatt|rispond)/i;
 
   // A reply that claims a NEW booking was just made (not a reschedule, which
   // says "spostato", nor a listing from get_my_appointments).
@@ -66,9 +74,27 @@ export async function getAIResponse(
    * real failure (or a safe retry prompt) instead. Never blocks a real booking,
    * because a successful book_appointment sets bookingOk=true.
    */
-  const finalize = (text: string | null | undefined): string => {
+  const finalize = async (text: string | null | undefined): Promise<string> => {
     const reply = text || "Scusa, non sono riuscito a rispondere. Riprova.";
     if (!bookingOk && CONFIRMATION_RE.test(reply)) {
+      // The model claims a fresh booking but no booking tool succeeded THIS turn.
+      // Before overriding with a failure, check the DB: the booking may have
+      // completed in a PREVIOUS turn (classic case: the customer split the
+      // request across two messages, so this turn only echoes the confirmation).
+      // If a matching recent booking exists, the confirmation is real — allow it.
+      if (!bookingFailed) {
+        try {
+          if (await hasRecentBooking(ctx.customerPhone, ctx.now)) {
+            console.log(
+              `${logPrefix} confirmation allowed: a recent booking for this phone ` +
+                `exists in the DB (likely completed in a previous turn).`
+            );
+            return reply;
+          }
+        } catch (err) {
+          console.error(`${logPrefix} hasRecentBooking check failed:`, err);
+        }
+      }
       console.warn(
         `${logPrefix} BLOCKED a booking confirmation with no successful booking ` +
           `(bookingFailed=${bookingFailed}). Model said: ${reply.slice(0, 160)}`
@@ -79,6 +105,26 @@ export async function getAIResponse(
           "Puoi ripetermi servizio, giorno e orario così ricontrollo la disponibilità? " +
           "In alternativa puoi chiamare il salone."
       );
+    }
+    // Safety net: if the model TELLS the customer it handed off to a human but
+    // never called escalate_to_human, make the claim true (flip to human + alert
+    // staff) so the promise isn't silently broken — the code is the source of
+    // truth, exactly like the booking gate above.
+    if (!escalated && ESCALATION_RE.test(reply)) {
+      try {
+        const res = await escalateAndNotify({
+          conversationId: ctx.conversationId,
+          customerPhone: ctx.customerPhone,
+          customerName: ctx.customerName,
+          reason: "richiesta operatore rilevata dalla risposta",
+        });
+        if (res.ok) {
+          escalated = true;
+          console.log(`${logPrefix} escalation ENFORCED by safety net (model claimed handoff without the tool).`);
+        }
+      } catch (err) {
+        console.error(`${logPrefix} escalation safety net failed:`, err);
+      }
     }
     return reply;
   };
@@ -96,7 +142,7 @@ export async function getAIResponse(
 
     const toolCalls = choice.tool_calls ?? [];
     if (toolCalls.length === 0) {
-      return finalize(choice.content);
+      return await finalize(choice.content);
     }
 
     // Record the assistant turn that requested the tools.
@@ -124,5 +170,5 @@ export async function getAIResponse(
   // Ran out of tool rounds — ask the model for a final text-only answer.
   console.warn(`${logPrefix} tool rounds (${MAX_TOOL_ROUNDS}) exhausted; forcing a final text answer`);
   const finalMsg = await getOpenAI().chat.completions.create({ model: MODEL, messages });
-  return finalize(finalMsg.choices[0]?.message?.content);
+  return await finalize(finalMsg.choices[0]?.message?.content);
 }

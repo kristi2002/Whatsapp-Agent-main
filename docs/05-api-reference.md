@@ -38,6 +38,7 @@ cookie. Money is in **euro cents**; dates in path/query are local `Europe/Rome`.
 |---|---|---|
 | GET | `/api/conversations` | All conversations, newest first, each with `last_message`. |
 | GET | `/api/conversations/[id]/messages` | Full message history for a conversation. |
+| DELETE | `/api/conversations/[id]/messages` | **Svuota chat** — deletes every message in the thread but keeps the conversation row (phone/name/mode preserved). Returns `{ ok: true }`. Used by the "clear chat" button. |
 | PATCH | `/api/conversations/[id]` | `{ mode: 'agent'\|'human' }` — flip auto-reply vs. manual. |
 | POST | `/api/conversations/[id]/send` | `{ message }` — staff manual reply: sends via Meta, stores as `assistant`, bumps `updated_at`. |
 

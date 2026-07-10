@@ -16,9 +16,10 @@ Two layers of configuration:
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | optional | WABA id; informational. |
 | `WHATSAPP_VERIFY_TOKEN` | **yes** | Any string; must match the Meta webhook config (GET verification). |
 | `WHATSAPP_APP_SECRET` | prod | Meta App Secret. Enables `X-Hub-Signature-256` verification. **Unset → signature check is skipped** (dev only). |
-| `STAFF_NOTIFY_NUMBER` | optional | WhatsApp number for staff handoff alerts (`393802871060`). |
-| `OPENROUTER_API_KEY` | **yes** (AI) | Key from openrouter.ai. **Unset → AI errors → customer gets the fallback message.** |
+| `STAFF_NOTIFY_NUMBER` | optional | WhatsApp number that receives staff alerts: (a) a customer asked for a human (`escalate_to_human`), and (b) the AI is failing repeatedly. **Unset → those alerts are silently skipped** (no crash). Plain-text alerts only reach it inside Meta's 24 h window. |
+| `OPENROUTER_API_KEY` | **yes** (AI) | Key from openrouter.ai. **Unset / over quota / bad → AI errors → customer gets the fallback message AND staff get an alert** (see `STAFF_NOTIFY_NUMBER`). |
 | `AI_MODEL` | optional | Model id. Code default `anthropic/claude-sonnet-4-20250514`; deploy default `google/gemini-2.5-flash`. |
+| `COALESCE_WINDOW_MS` | optional | Debounce window (ms) for merging a burst of consecutive customer messages into ONE AI turn. Default `2500`. `0` disables coalescing (reply per message). See [02-agent-logic.md](02-agent-logic.md) §3.4. |
 | `NEXT_PUBLIC_SUPABASE_URL` | **yes** | Supabase API URL. **Inlined into the browser bundle at build time.** |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **yes** | Anon key (browser Realtime). **Inlined at build time.** |
 | `SUPABASE_SERVICE_ROLE_KEY` | **yes** | Service-role key (server/webhook). **Secret — never expose to the browser.** |
@@ -36,7 +37,10 @@ Two layers of configuration:
   - `WHATSAPP_APP_SECRET` unset → webhook signature verification **skipped**
     (returns valid). Fine locally; **set it in production.**
   - `OPENROUTER_API_KEY` / bad `AI_MODEL` → `getAIResponse` throws → the customer
-    receives the safe Italian fallback; the webhook still returns 200.
+    receives the safe Italian fallback; the webhook still returns 200. **Staff are
+    now also alerted** (rate-limited, once / 15 min) via `STAFF_NOTIFY_NUMBER` so
+    an AI outage is no longer invisible. A common cause is an OpenRouter key that
+    hit its credit/usage limit (HTTP 403 "Key limit exceeded").
   - `CRON_SECRET` unset → reminders endpoint returns 401 (silent no reminders).
 - **Build needs no secrets.** All external clients (Supabase, OpenAI/OpenRouter)
   are **lazily constructed**, so `npm run build` and the test suite work with

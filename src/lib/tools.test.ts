@@ -9,8 +9,10 @@ const booking = vi.hoisted(() => ({
   getAppointmentsForPhone: vi.fn(),
   cancelAppointment: vi.fn(),
 }));
+const escalation = vi.hoisted(() => ({ escalateAndNotify: vi.fn() }));
 
 vi.mock("@/lib/booking", () => booking);
+vi.mock("@/lib/escalation", () => escalation);
 
 import { executeTool, TOOL_DEFINITIONS, type ToolContext } from "@/lib/tools";
 
@@ -26,7 +28,7 @@ beforeEach(() => {
 });
 
 describe("TOOL_DEFINITIONS", () => {
-  it("exposes the six booking tools", () => {
+  it("exposes the booking tools plus human escalation", () => {
     const names = TOOL_DEFINITIONS.filter((t) => t.type === "function")
       .map((t) => t.function.name)
       .sort();
@@ -34,6 +36,7 @@ describe("TOOL_DEFINITIONS", () => {
       "book_appointment",
       "cancel_appointment",
       "check_availability",
+      "escalate_to_human",
       "get_my_appointments",
       "list_services",
       "reschedule_appointment",
@@ -83,6 +86,18 @@ describe("executeTool routing", () => {
   it("cancel_appointment returns the cancel message", async () => {
     booking.cancelAppointment.mockResolvedValue({ ok: true, message: "Appuntamento annullato" });
     expect(await executeTool("cancel_appointment", {}, ctx)).toBe("Appuntamento annullato");
+  });
+
+  it("escalate_to_human delegates to escalateAndNotify with the customer context", async () => {
+    escalation.escalateAndNotify.mockResolvedValue({ ok: true, message: "Ho passato la conversazione a un operatore." });
+    const out = await executeTool("escalate_to_human", { reason: "reclamo" }, ctx);
+    expect(out).toContain("operatore");
+    expect(escalation.escalateAndNotify).toHaveBeenCalledWith({
+      conversationId: "c1",
+      customerPhone: "393330000000",
+      customerName: "Mario",
+      reason: "reclamo",
+    });
   });
 
   it("returns a message for an unknown tool", async () => {

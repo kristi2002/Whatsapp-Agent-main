@@ -31,6 +31,25 @@ export async function sendWhatsAppMessage(to: string, body: string) {
 }
 
 /**
+ * Send an internal alert to the salon's staff WhatsApp number (STAFF_NOTIFY_NUMBER)
+ * — e.g. a customer asked for a human, or the AI is failing. Best-effort: no-op
+ * if the number isn't configured, and never throws (a failed alert must not
+ * break the customer-facing flow).
+ *
+ * NOTE: like all outbound messages, plain text only reaches the staff number
+ * inside Meta's 24h service window; use an approved template for cold sends.
+ */
+export async function notifyStaff(body: string): Promise<void> {
+  const to = process.env.STAFF_NOTIFY_NUMBER;
+  if (!to) return; // not configured — silently skip
+  try {
+    await sendWhatsAppMessage(to, body);
+  } catch (err) {
+    console.error("notifyStaff failed (non-fatal):", err);
+  }
+}
+
+/**
  * Show a native "typing…" indicator in the customer's chat (and mark their
  * message read) via Meta's typing-indicator API. It lasts up to 25s or until we
  * send the reply — whichever comes first — so it covers the latency of the

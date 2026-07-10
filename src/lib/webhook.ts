@@ -6,7 +6,7 @@
 
 import crypto from "crypto";
 import { supabase } from "@/lib/supabase";
-import { sendWhatsAppMessage, sendTypingIndicator } from "@/lib/whatsapp";
+import { sendWhatsAppMessage, sendTypingIndicator, notifyStaff } from "@/lib/whatsapp";
 import { getAIResponse } from "@/lib/ai";
 
 /** Verify Meta's X-Hub-Signature-256 header against the raw request body. */
@@ -27,6 +27,22 @@ export function verifySignature(
 
 const AI_FALLBACK =
   "Scusa, sto avendo un problema tecnico in questo momento. Riprova tra poco, oppure chiama il salone. 🙏";
+
+// The AI failing (e.g. an expired/over-limit OpenRouter key) previously showed
+// the customer the fallback while staff had no idea the assistant was down. We
+// now alert the staff number, rate-limited so one outage doesn't spam it.
+let lastAiFailureAlertAt = 0;
+const AI_FAILURE_ALERT_COOLDOWN_MS = 15 * 60_000; // at most one alert / 15 min
+function alertStaffAiDown(phone: string, err: unknown): void {
+  const now = Date.now();
+  if (now - lastAiFailureAlertAt < AI_FAILURE_ALERT_COOLDOWN_MS) return;
+  lastAiFailureAlertAt = now;
+  const detail = String((err as Error)?.message ?? err).slice(0, 200);
+  void notifyStaff(
+    `⚠️ L'assistente AI non è riuscito a rispondere a un cliente (${phone}) e ha inviato il messaggio di errore. ` +
+      `Dettaglio: ${detail}. Controlla il credito/chiave OpenRouter (AI_MODEL / OPENROUTER_API_KEY).`
+  );
+}
 const NON_TEXT_REPLY =
   "Al momento riesco a leggere solo messaggi di testo. Scrivimi pure a parole cosa ti serve (es. “vorrei prenotare un taglio venerdì”) 😊";
 
@@ -47,8 +63,45 @@ export function runSerial<T>(key: string, task: () => Promise<T>): Promise<T> {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
+ * Coalescing window (ms). People type on WhatsApp in bursts ("...alle 16... a
+ * nome di Maria Paola" then "Con Genny"). Without coalescing each message is a
+ * separate AI turn, which double-processes one intent — the agent booked on the
+ * first, then produced a second (un-backed) confirmation the safety gate turned
+ * into a confusing "Scusa, non sono riuscito…". We ingest every message
+ * immediately (so nothing is dropped) but debounce the REPLY: each new message
+ * resets the timer, and the agent answers once over the full history.
+ */
+function coalesceWindowMs(): number {
+  const v = Number(process.env.COALESCE_WINDOW_MS);
+  return Number.isFinite(v) && v >= 0 ? v : 2500;
+}
+
+/** Pending reply timer per phone (single persistent Node instance). */
+const replyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+type ReplySnapshot = { phone: string; conversationId: string; name: string | null };
+
+/**
+ * (Re)schedule the debounced reply for a phone. Called on every ingested
+ * text message in agent mode; the last message in a burst wins.
+ */
+function scheduleReply(snap: ReplySnapshot): void {
+  const existing = replyTimers.get(snap.phone);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    replyTimers.delete(snap.phone);
+    // Serialize the reply per phone so two bursts can't produce overlapping
+    // answers, and so it runs after any in-flight ingest for this phone.
+    void runSerial(snap.phone, () =>
+      generateAndSendReply(snap).catch((err) => console.error("generateAndSendReply error:", err))
+    );
+  }, coalesceWindowMs());
+  replyTimers.set(snap.phone, timer);
+}
+
+/**
  * Process an inbound Meta webhook payload. Iterates EVERY message in the batch
- * (Meta can deliver several at once) and handles each independently so one bad
+ * (Meta can deliver several at once) and ingests each independently so one bad
  * message can't drop the others. Safe to call fire-and-forget.
  */
 export async function processEvent(body: any): Promise<void> {
@@ -59,7 +112,9 @@ export async function processEvent(body: any): Promise<void> {
       for (const message of value?.messages ?? []) {
         const phone: string | undefined = message?.from;
         const task = () =>
-          processMessage(value, message).catch((err) => console.error("processMessage error:", err));
+          ingestMessage(value, message).catch((err) => console.error("ingestMessage error:", err));
+        // Ingest is serialized per phone so concurrent deliveries can't race on
+        // conversation creation or interleave message order.
         if (phone) await runSerial(phone, task);
         else await task();
       }
@@ -67,8 +122,12 @@ export async function processEvent(body: any): Promise<void> {
   }
 }
 
-/** Handle a single inbound message. */
-async function processMessage(value: any, message: any): Promise<void> {
+/**
+ * Ingest a single inbound message: store it, dedupe, handle non-text/human
+ * mode, and (in agent mode) schedule the debounced reply. Fast — never runs
+ * the AI itself, so a burst of messages is stored in order before any reply.
+ */
+async function ingestMessage(value: any, message: any): Promise<void> {
   const phone: string | undefined = message?.from;
   if (!phone) return;
   const name: string | null = value?.contacts?.[0]?.profile?.name || null;
@@ -120,21 +179,31 @@ async function processMessage(value: any, message: any): Promise<void> {
   // Human mode — staff will reply from the gestionale; don't auto-answer.
   if (conversation.mode === "human") return;
 
-  // Show a native "typing…" indicator while the AI works through its tool loop
-  // (up to 5 rounds of model + DB calls can take several seconds). Best-effort:
-  // fire-and-forget so it never delays or blocks the actual reply.
+  // Show a native "typing…" indicator immediately (covers the coalescing window
+  // plus the AI tool loop) and mark the message read. Best-effort, never throws.
   if (whatsappMsgId) void sendTypingIndicator(whatsappMsgId);
+
+  // Debounce the reply: a follow-up message within the window answers together.
+  scheduleReply({ phone, conversationId: conversation.id, name: name ?? conversation.name ?? null });
+}
+
+/**
+ * Generate and send the agent reply for a conversation, over the FULL recent
+ * history (so a coalesced burst is answered as one turn). Runs after the
+ * debounce window; never leaves the customer without an answer.
+ */
+async function generateAndSendReply(snap: ReplySnapshot): Promise<void> {
+  const { phone, conversationId, name } = snap;
 
   // Conversation history: the MOST RECENT 20 messages, chronological order.
   const { data: recent } = await supabase
     .from("messages")
     .select("role, content, created_at")
-    .eq("conversation_id", conversation.id)
+    .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(20);
   const history = (recent || []).slice().reverse();
 
-  // Generate the reply; NEVER leave the customer without an answer.
   let aiResponse: string;
   try {
     aiResponse = await getAIResponse(
@@ -144,14 +213,15 @@ async function processMessage(value: any, message: any): Promise<void> {
       })),
       {
         customerPhone: phone,
-        customerName: name ?? conversation.name ?? null,
-        conversationId: conversation.id,
+        customerName: name,
+        conversationId,
         now: new Date(),
       }
     );
   } catch (err) {
     console.error("getAIResponse failed:", err);
     aiResponse = AI_FALLBACK;
+    alertStaffAiDown(phone, err); // let staff know the assistant is down
   }
 
   try {
@@ -161,7 +231,7 @@ async function processMessage(value: any, message: any): Promise<void> {
   }
 
   await supabase.from("messages").insert({
-    conversation_id: conversation.id,
+    conversation_id: conversationId,
     role: "assistant",
     content: aiResponse,
   });
@@ -169,5 +239,5 @@ async function processMessage(value: any, message: any): Promise<void> {
   await supabase
     .from("conversations")
     .update({ updated_at: new Date().toISOString() })
-    .eq("id", conversation.id);
+    .eq("id", conversationId);
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Send, Bot, User, ArrowLeft, Search } from "lucide-react";
+import { Send, Bot, User, ArrowLeft, Search, Trash2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Badge } from "@/components/ui";
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
@@ -23,6 +23,11 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [q, setQ] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Whether the message list is scrolled (near) the bottom. Drives auto-scroll:
+  // we only jump to the newest message when the user is already at the bottom,
+  // so scrolling up to read history isn't yanked back down by the 5s poller.
+  const atBottomRef = useRef(true);
   const selected = conversations.find((c) => c.id === selectedId);
 
   const fetchConversations = useCallback(async () => { setConversations(await fetch("/api/conversations").then((r) => r.json())); }, []);
@@ -30,7 +35,18 @@ export default function ChatPage() {
 
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ fetchConversations(); }, [fetchConversations]);
   useEffect(() => { /* eslint-disable-next-line react-hooks/set-state-in-effect */ if (selectedId) fetchMessages(selectedId); }, [selectedId, fetchMessages]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  // Switching conversation always lands you at the bottom of the new thread.
+  useEffect(() => { atBottomRef.current = true; }, [selectedId]);
+  // Auto-scroll to the newest message ONLY when already near the bottom (see
+  // atBottomRef). Reading older messages is no longer interrupted by polling.
+  useEffect(() => { if (atBottomRef.current) endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Track whether the thread is scrolled near the bottom (80px tolerance).
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
 
   // Live updates via Supabase Realtime (push). Requires the browser anon key to
   // have read access; once RLS is enabled (migration 9) this stops delivering
@@ -67,8 +83,18 @@ export default function ChatPage() {
   async function handleSend() {
     if (!input.trim() || !selectedId || sending) return;
     setSending(true);
+    atBottomRef.current = true; // sending your own message always scrolls to it
     await fetch(`/api/conversations/${selectedId}/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: input.trim() }) });
     setInput(""); setSending(false); fetchMessages(selectedId);
+  }
+
+  async function handleClear() {
+    if (!selectedId) return;
+    if (!window.confirm("Svuotare questa chat? Tutti i messaggi verranno eliminati definitivamente.")) return;
+    const res = await fetch(`/api/conversations/${selectedId}/messages`, { method: "DELETE" });
+    if (!res.ok) { window.alert("Non è stato possibile svuotare la chat. Riprova."); return; }
+    setMessages([]);
+    fetchConversations();
   }
 
   const filtered = conversations.filter((c) => !q || `${c.name ?? ""} ${c.phone}`.toLowerCase().includes(q.toLowerCase()));
@@ -122,9 +148,12 @@ export default function ChatPage() {
                 <button onClick={toggleMode} className="flex items-center gap-2 h-8 px-3 rounded-lg text-xs font-medium shrink-0" style={{ background: selected.mode === "agent" ? "var(--success-soft)" : "var(--warning-soft)", color: selected.mode === "agent" ? "var(--success)" : "var(--warning)" }}>
                   {selected.mode === "agent" ? <Bot size={14} /> : <User size={14} />}<span className="hidden sm:inline">{selected.mode === "agent" ? "Assistente AI" : "Manuale"}</span>
                 </button>
+                <button onClick={handleClear} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover-surface shrink-0" style={{ border: "1px solid var(--border)" }} aria-label="Svuota chat" title="Svuota chat">
+                  <Trash2 size={15} />
+                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto thin-scroll px-4 sm:px-6 py-5 space-y-3">
+              <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto thin-scroll px-4 sm:px-6 py-5 space-y-3">
                 {messages.map((m, i) => {
                   const isUser = m.role === "user";
                   const showTime = i === messages.length - 1 || messages[i + 1]?.role !== m.role;

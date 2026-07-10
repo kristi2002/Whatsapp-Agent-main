@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const createMock = vi.fn();
 const executeToolMock = vi.fn(async () => "RISULTATO_STRUMENTO");
+// Controls the DB-aware confirmation gate: whether a recent booking exists.
+const hasRecentBookingMock = vi.fn(async () => false);
+// The escalation safety net (model claims a handoff without calling the tool).
+const escalateAndNotifyMock = vi.fn(async () => ({ ok: true, message: "ok" }));
 
 vi.mock("openai", () => ({
   default: class {
@@ -18,6 +22,11 @@ vi.mock("@/lib/tools", () => ({
 // this suite stays focused on the tool loop (and never touches supabase).
 vi.mock("@/lib/booking", () => ({
   formatBusinessHours: async () => "Aperto:\n- martedì: 09:00–19:00\nChiuso: domenica, lunedì.",
+  hasRecentBooking: (...a: unknown[]) => hasRecentBookingMock(...(a as [])),
+}));
+
+vi.mock("@/lib/escalation", () => ({
+  escalateAndNotify: (...a: unknown[]) => escalateAndNotifyMock(...(a as [])),
 }));
 
 import { getAIResponse } from "@/lib/ai";
@@ -32,6 +41,10 @@ const ctx = {
 beforeEach(() => {
   createMock.mockReset();
   executeToolMock.mockClear();
+  hasRecentBookingMock.mockReset();
+  hasRecentBookingMock.mockResolvedValue(false);
+  escalateAndNotifyMock.mockClear();
+  escalateAndNotifyMock.mockResolvedValue({ ok: true, message: "ok" });
 });
 
 describe("getAIResponse", () => {
@@ -143,5 +156,53 @@ describe("getAIResponse", () => {
 
     const reply = await getAIResponse([{ role: "user", content: "Prenota le 10:00" }], ctx);
     expect(reply).toBe("Prenotazione confermata! A domani 😊");
+  });
+
+  it("blocks a confirmation when no tool ran this turn AND no recent booking exists in the DB", async () => {
+    hasRecentBookingMock.mockResolvedValue(false);
+    // Model claims a booking with no tool call at all (pure hallucination).
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "Prenotazione confermata! A presto 😊", tool_calls: [] } }],
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "confermi?" }], ctx);
+    expect(reply).toContain("non sono riuscito a completare la prenotazione");
+    expect(hasRecentBookingMock).toHaveBeenCalledWith(ctx.customerPhone, ctx.now);
+  });
+
+  it("allows a confirmation echo when the booking really happened in a previous turn (split-message case)", async () => {
+    // Reproduces the WhatsApp bug: turn 1 booked ("...alle 16... Maria Paola"),
+    // then a second message ("Con Genny") makes the model re-confirm WITHOUT
+    // calling book_appointment again. The DB check must let it through.
+    hasRecentBookingMock.mockResolvedValue(true);
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "Perfetto! Appuntamento confermato per le 16:00 con Genny 😊", tool_calls: [] } }],
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "Con Genny" }], ctx);
+    expect(reply).toBe("Perfetto! Appuntamento confermato per le 16:00 con Genny 😊");
+    expect(hasRecentBookingMock).toHaveBeenCalledWith(ctx.customerPhone, ctx.now);
+  });
+
+  it("enforces escalation when the model claims a handoff without calling the tool", async () => {
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "Certo, ho inoltrato la tua richiesta a un operatore che ti ricontatterà a breve.", tool_calls: [] } }],
+    });
+
+    const reply = await getAIResponse([{ role: "user", content: "voglio un operatore" }], ctx);
+    expect(reply).toContain("operatore");
+    // The narrated-but-not-called handoff is made real by the safety net.
+    expect(escalateAndNotifyMock).toHaveBeenCalledTimes(1);
+    expect(escalateAndNotifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: "c1", customerPhone: ctx.customerPhone })
+    );
+  });
+
+  it("does NOT trigger the escalation net for an ordinary reply", async () => {
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "Certo! Che servizio ti interessa?", tool_calls: [] } }],
+    });
+    await getAIResponse([{ role: "user", content: "Ciao" }], ctx);
+    expect(escalateAndNotifyMock).not.toHaveBeenCalled();
   });
 });

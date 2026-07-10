@@ -41,9 +41,11 @@ computes availability. There is **no n8n** — this Next.js app replaced it.
 | 06 | **[06-dashboard-gestionale.md](06-dashboard-gestionale.md)** | Every dashboard page, navigation, layout, theming, real-time behaviour. |
 | 07 | **[07-configuration.md](07-configuration.md)** | Environment variables, `salon-config.ts`, booking knobs, fail-fast/degrade behaviour, secrets. |
 | 08 | **[08-deployment.md](08-deployment.md)** | Hetzner + Coolify runbook, self-hosted Supabase, Meta webhook setup, reminder cron, go-live checklist. |
-| 09 | **[09-development-testing.md](09-development-testing.md)** | Local dev, scripts, the 60-test suite, CI, smoke test, message simulator. |
+| 09 | **[09-development-testing.md](09-development-testing.md)** | Local dev, scripts, the test suite, CI, smoke test, message simulator. |
+| 10 | **[10-agent-hardening-changes.md](10-agent-hardening-changes.md)** | ⭐ **2026-07-10 changes** — message coalescing, DB-aware confirmation gate, AI-failure alerts, human handoff, chat-UX fixes. Full changelog for review. |
 
-**New here?** Read **01 → 02 → 03**. That's the whole agent, in order.
+**New here?** Read **01 → 02 → 03**. That's the whole agent, in order. For the
+latest changes, see **[10](10-agent-hardening-changes.md)**.
 
 ---
 
@@ -51,7 +53,7 @@ computes availability. There is **no n8n** — this Next.js app replaced it.
 
 ```bash
 npm install
-npm test           # 60 unit tests — no services or secrets required
+npm test           # 88 unit tests — no services or secrets required
 npm run typecheck  # tsc --noEmit
 npm run build      # production build (all external clients are lazy)
 ```
