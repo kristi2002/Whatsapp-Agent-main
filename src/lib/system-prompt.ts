@@ -10,7 +10,18 @@ import { formatZoned } from "@/lib/timezone";
  */
 export function buildSalonSystemPrompt(now: Date = new Date(), customerName?: string | null, hoursLabel?: string | null): string {
   const nowLabel = formatZoned(now, SALON.timezone, SALON.locale);
-  const isoDate = new Intl.DateTimeFormat("en-CA", { timeZone: SALON.timezone }).format(now); // YYYY-MM-DD
+  const isoFmt = new Intl.DateTimeFormat("en-CA", { timeZone: SALON.timezone }); // YYYY-MM-DD
+  const isoDate = isoFmt.format(now);
+
+  // An explicit weekday→date calendar for the next 2 weeks. LLMs frequently
+  // miscompute "giovedì" / "sabato prossimo" from an ISO date alone, so we give
+  // the exact mapping and forbid mental date math.
+  const wdFmt = new Intl.DateTimeFormat("it-IT", { timeZone: SALON.timezone, weekday: "long" });
+  const upcomingDays = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(now.getTime() + i * 86_400_000);
+    const tag = i === 0 ? " (oggi)" : i === 1 ? " (domani)" : "";
+    return `- ${wdFmt.format(d)} ${isoFmt.format(d)}${tag}`;
+  }).join("\n");
 
   const nameBlock = customerName
     ? `\n## Cliente\nIl cliente si chiama "${customerName}" (dal profilo WhatsApp). Usa QUESTO nome per la prenotazione se non ne indica un altro. NON chiedere il nome: lo conosci già.\n`
@@ -20,7 +31,11 @@ export function buildSalonSystemPrompt(now: Date = new Date(), customerName?: st
 
 ## Data e ora attuali
 Adesso è: ${nowLabel} (fuso orario ${SALON.timezone}).
-La data di oggi in formato ISO è ${isoDate}. Usala per calcolare "oggi", "domani", "sabato prossimo", ecc. Passa sempre le date agli strumenti nel formato YYYY-MM-DD.
+La data di oggi in formato ISO è ${isoDate}. Passa sempre le date agli strumenti nel formato YYYY-MM-DD.
+
+### Calendario dei prossimi giorni — USA QUESTE date esatte
+${upcomingDays}
+Quando il cliente nomina un giorno ("giovedì", "sabato", "dopodomani", "sabato prossimo"), NON calcolare la data a mente: prendi la data ISO ESATTA da questo elenco. Scegli la prima occorrenza futura del giorno indicato, a meno che il cliente dica esplicitamente "prossima settimana".
 ${nameBlock}
 ## Il tuo ruolo
 - Aiuti i clienti a prenotare, spostare o annullare appuntamenti.
