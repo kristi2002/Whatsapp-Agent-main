@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { CalendarClock, Hourglass, Check, X, Scissors, MessageCircle, Phone, Globe, Store, Clock, type LucideIcon } from "lucide-react";
+import { CalendarClock, Hourglass, Check, X, Scissors, MessageCircle, Phone, Globe, Store, Clock, FileSpreadsheet, FileText, type LucideIcon } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import { Card, Badge, Select } from "@/components/ui";
+import { Card, Badge, Select, Button } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
 import { StatCard, Avatar } from "@/components/kit";
 import { DateField } from "@/components/pickers";
@@ -113,6 +113,62 @@ export default function AppuntamentiPage() {
     return [...m.entries()];
   }, [pageItems]);
   const today = todayStr(), tomorrow = plusDays(1);
+
+  // Excel: CSV with UTF-8 BOM + ";" separator so Italian-locale Excel opens it
+  // directly with correct accents and columns. Exports ALL filtered rows.
+  const exportExcel = useCallback(() => {
+    const esc = (v: string) => (/[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const rows = filtered.map((a) => [
+      fmtDate(a.starts_at), fmtTime(a.starts_at), a.customer_name || a.customer_phone, a.customer_phone,
+      a.service?.name ?? "", a.stylist?.name ?? "", STATUS_LABEL[a.status] ?? a.status, SOURCE_LABEL[a.source] ?? a.source,
+      a.service?.price_cents != null ? (a.service.price_cents / 100).toFixed(2).replace(".", ",") : "",
+    ]);
+    const head = ["Data", "Ora", "Cliente", "Telefono", "Servizio", "Operatore", "Stato", "Origine", "Prezzo (EUR)"];
+    const bom = String.fromCharCode(0xfeff); // UTF-8 BOM so Excel detects the encoding
+    const csv = bom + [head, ...rows].map((r) => r.map(esc).join(";")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = `appuntamenti_${from}_${to}.csv`; link.click();
+    URL.revokeObjectURL(url);
+  }, [filtered, from, to]);
+
+  // PDF: open a clean print document and trigger the browser's print dialog
+  // ("Salva come PDF"). No PDF library needed.
+  const exportPdf = useCallback(() => {
+    const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const totalCents = filtered.reduce((s, a) => s + (a.service?.price_cents ?? 0), 0);
+    const body = filtered.map((a) => `<tr>
+      <td class="cap">${esc(fmtDate(a.starts_at))}</td><td class="num">${fmtTime(a.starts_at)}</td>
+      <td><strong>${esc(a.customer_name || a.customer_phone)}</strong></td>
+      <td>${esc(a.service?.name ?? "—")}</td><td>${esc(a.stylist?.name ?? "—")}</td>
+      <td><span class="badge b-${a.status}">${STATUS_LABEL[a.status] ?? esc(a.status)}</span></td>
+      <td>${SOURCE_LABEL[a.source] ?? esc(a.source)}</td>
+      <td class="num">${a.service?.price_cents != null ? esc(fmtPrice(a.service.price_cents)) : "—"}</td>
+    </tr>`).join("");
+    const html = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Appuntamenti ${from} → ${to}</title><style>
+      body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;color:#2a2230;margin:28px;}
+      h1{font-size:19px;margin:0;} .sub{color:#877c86;font-size:12px;margin:4px 0 18px;}
+      table{width:100%;border-collapse:collapse;font-size:11.5px;}
+      th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#877c86;padding:6px 8px;border-bottom:1.5px solid #d8d2ce;}
+      td{padding:7px 8px;border-bottom:1px solid #eee9e6;vertical-align:top;}
+      tr:nth-child(even) td{background:#faf7f5;}
+      .num{font-variant-numeric:tabular-nums;white-space:nowrap;} .cap{text-transform:capitalize;white-space:nowrap;}
+      .badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:10px;font-weight:600;}
+      .b-booked{background:#e2f3ea;color:#2e9e6b;} .b-completed{background:#e7eef6;color:#4a78b0;}
+      .b-cancelled{background:#f9e6e9;color:#c4485b;} .b-no_show{background:#f7edda;color:#bd8226;}
+      .tot{margin-top:14px;font-size:12px;color:#877c86;display:flex;justify-content:space-between;}
+      @page{margin:14mm;}
+    </style></head><body>
+      <h1>Max&amp;Tony Nazionale — Appuntamenti</h1>
+      <p class="sub">Periodo ${from} → ${to} · ${filtered.length} appuntamenti · generato il ${new Date().toLocaleString("it-IT", { timeZone: TZ })}</p>
+      <table><thead><tr><th>Data</th><th>Ora</th><th>Cliente</th><th>Servizio</th><th>Operatore</th><th>Stato</th><th>Origine</th><th>Prezzo</th></tr></thead><tbody>${body}</tbody></table>
+      <p class="tot"><span>${filtered.length} appuntamenti</span><span>Totale servizi: <strong>${esc(fmtPrice(totalCents))}</strong></span></p>
+      <script>window.onload = () => window.print();</script>
+    </body></html>`;
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }, [filtered, from, to]);
   const activeFilters = (status ? 1 : 0) + (op ? 1 : 0) + (src ? 1 : 0);
   const summary = useMemo(() => ({
     total: appts.length,
@@ -122,7 +178,14 @@ export default function AppuntamentiPage() {
   }), [appts]);
 
   return (
-    <AppShell title="Appuntamenti" subtitle={`${from} → ${to}`}>
+    <AppShell title="Appuntamenti" subtitle={`${from} → ${to}`} actions={<>
+      <Button size="sm" variant="secondary" onClick={exportExcel} disabled={loading || filtered.length === 0} title="Esporta in Excel (CSV)">
+        <FileSpreadsheet size={15} /> <span className="hidden sm:inline">Excel</span>
+      </Button>
+      <Button size="sm" variant="secondary" onClick={exportPdf} disabled={loading || filtered.length === 0} title="Stampa / salva come PDF">
+        <FileText size={15} /> <span className="hidden sm:inline">PDF</span>
+      </Button>
+    </>}>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <StatCard icon={CalendarClock} value={summary.total} label="Totale" accent />
         <StatCard icon={Hourglass} value={summary.booked} label="Prenotati" />
