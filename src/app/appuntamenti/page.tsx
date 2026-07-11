@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { CalendarClock, Hourglass, Check, X } from "lucide-react";
+import { CalendarClock, Hourglass, Check, X, Scissors, MessageCircle, Phone, Globe, Store, Clock, type LucideIcon } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { Card, Badge, Select } from "@/components/ui";
 import { Filters, FilterField, Pagination, usePagination } from "@/components/data-ui";
-import { StatCard } from "@/components/kit";
+import { StatCard, Avatar } from "@/components/kit";
 import { DateField } from "@/components/pickers";
 import type { AppointmentWithRelations } from "@/lib/gestionale-types";
 
@@ -14,9 +14,60 @@ const todayStr = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format
 const plusDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d); };
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("it-IT", { timeZone: TZ, weekday: "short", day: "2-digit", month: "short" });
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("it-IT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+const fmtDayLong = (iso: string) => new Date(iso).toLocaleDateString("it-IT", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
+const dayKey = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(iso));
+const fmtPrice = (cents: number) => (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: cents % 100 ? 2 : 0 });
 const STATUS: Record<string, "success" | "info" | "warning" | "neutral" | "danger"> = { booked: "success", completed: "info", no_show: "warning", cancelled: "danger" };
 const STATUS_LABEL: Record<string, string> = { booked: "Prenotato", completed: "Completato", cancelled: "Annullato", no_show: "Assente" };
+const STATUS_COLOR: Record<string, string> = { booked: "var(--success)", completed: "var(--info)", no_show: "var(--warning)", cancelled: "var(--danger)" };
 const SOURCE_LABEL: Record<string, string> = { whatsapp: "WhatsApp", gestionale: "Gestionale", online: "Online", phone: "Telefono" };
+const SOURCE_ICON: Record<string, LucideIcon> = { whatsapp: MessageCircle, gestionale: Store, online: Globe, phone: Phone };
+
+const initialsOf = (a: AppointmentWithRelations) => {
+  const n = (a.customer_name ?? "").trim();
+  if (!n) return "#";
+  const parts = n.split(/\s+/);
+  return ((parts[0][0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "#";
+};
+
+/** Compact appointment card for the phone layout (the table needs 720px+). */
+function ApptCard({ a }: { a: AppointmentWithRelations }) {
+  const SourceIcon = SOURCE_ICON[a.source] ?? Globe;
+  const cancelled = a.status === "cancelled";
+  return (
+    <Card className="relative overflow-hidden p-4 pl-5" style={cancelled ? { opacity: 0.65 } : undefined}>
+      <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: STATUS_COLOR[a.status] ?? "var(--border-strong)" }} />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-[17px] font-semibold text-accent tabular-nums leading-none">{fmtTime(a.starts_at)}</span>
+          <span className="text-xs text-faint tabular-nums">– {fmtTime(a.ends_at)}</span>
+          {a.service?.duration_min != null && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-faint ml-1"><Clock size={11} /> {a.service.duration_min} min</span>
+          )}
+        </div>
+        <Badge tone={STATUS[a.status]}>{STATUS_LABEL[a.status]}</Badge>
+      </div>
+      <div className="flex items-center gap-3 mt-3.5">
+        <Avatar initials={initialsOf(a)} size={38} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold truncate" style={{ color: "var(--text)" }}>{a.customer_name || a.customer_phone}</p>
+          <p className="text-[13px] text-muted truncate">{a.service?.name ?? "—"}</p>
+        </div>
+        {a.service?.price_cents != null && (
+          <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: "var(--text)" }}>{fmtPrice(a.service.price_cents)}</span>
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-3 mt-3.5 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted min-w-0">
+          <Scissors size={12.5} className="shrink-0 text-faint" /><span className="truncate">{a.stylist?.name ?? "—"}</span>
+        </span>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0" style={{ background: "var(--surface-2)", color: "var(--text-muted)" }}>
+          <SourceIcon size={11.5} /> {SOURCE_LABEL[a.source] ?? a.source}
+        </span>
+      </div>
+    </Card>
+  );
+}
 
 export default function AppuntamentiPage() {
   const [appts, setAppts] = useState<AppointmentWithRelations[]>([]);
@@ -50,6 +101,18 @@ export default function AppuntamentiPage() {
     return true;
   }), [appts, status, op, src]);
   const { page, setPage, pageItems, pageCount, total } = usePagination(filtered, 20);
+  // Phone layout groups the page's rows by day ("Oggi", "Domani", …); the API
+  // returns rows ordered by starts_at, so Map insertion order is already right.
+  const dayGroups = useMemo(() => {
+    const m = new Map<string, AppointmentWithRelations[]>();
+    for (const a of pageItems) {
+      const k = dayKey(a.starts_at);
+      const g = m.get(k);
+      if (g) g.push(a); else m.set(k, [a]);
+    }
+    return [...m.entries()];
+  }, [pageItems]);
+  const today = todayStr(), tomorrow = plusDays(1);
   const activeFilters = (status ? 1 : 0) + (op ? 1 : 0) + (src ? 1 : 0);
   const summary = useMemo(() => ({
     total: appts.length,
@@ -77,7 +140,30 @@ export default function AppuntamentiPage() {
 
       {loading ? <p className="text-sm text-muted">Caricamento…</p> : (
         <>
-          <Card className="overflow-hidden">
+          {/* Phone: day-grouped cards (the table below needs 720px+ and would only pan). */}
+          <div className="md:hidden space-y-5">
+            {dayGroups.map(([key, list]) => (
+              <section key={key}>
+                <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
+                  <h3 className="text-[13px] font-semibold capitalize truncate" style={{ color: "var(--text)" }}>
+                    {key === today ? <><span className="text-accent">Oggi</span><span className="font-normal text-faint"> · </span>{fmtDayLong(list[0].starts_at)}</>
+                      : key === tomorrow ? <><span className="text-accent">Domani</span><span className="font-normal text-faint"> · </span>{fmtDayLong(list[0].starts_at)}</>
+                      : fmtDayLong(list[0].starts_at)}
+                  </h3>
+                  <span className="text-[11px] text-faint tabular-nums shrink-0">{list.length} app.</span>
+                </div>
+                <div className="space-y-2.5">{list.map((a) => <ApptCard key={a.id} a={a} />)}</div>
+              </section>
+            ))}
+            {filtered.length === 0 && (
+              <Card className="py-10 px-5 text-center">
+                <CalendarClock size={26} className="mx-auto text-faint mb-2" />
+                <p className="text-sm text-faint">Nessun appuntamento nel periodo.</p>
+              </Card>
+            )}
+          </div>
+
+          <Card className="overflow-hidden hidden md:block">
             <div className="overflow-x-auto thin-scroll"><div className="min-w-[720px]">
               <div className="grid grid-cols-[110px_60px_1fr_1fr_1fr_auto_auto] gap-3 px-5 py-2.5 bd-b text-[11px] uppercase tracking-wide text-faint">
                 <span>Data</span><span>Ora</span><span>Cliente</span><span>Servizio</span><span>Operatore</span><span>Stato</span><span>Origine</span>
